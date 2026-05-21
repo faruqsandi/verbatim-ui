@@ -12,7 +12,7 @@
     Play,
     Pause,
     Square,
-    Music
+    Music,
   } from "@lucide/svelte";
   import VirtualTable from "$lib/VirtualTable.svelte";
 
@@ -30,7 +30,6 @@
   let audioDuration = 0;
   let audioCurrentTime = 0;
   let audioPaused = true;
-
 
   let history = [];
   let currentHistoryIndex = -1;
@@ -476,6 +475,31 @@
       contextMenu.show = false;
     }
   }
+
+  function renameSpeaker(oldName, newName) {
+    newName = newName.trim();
+    if (!newName || oldName === newName) return;
+
+    let changed = false;
+    words = words.map((w) => {
+      if (w.speaker === oldName) {
+        changed = true;
+        return { ...w, speaker: newName };
+      }
+      return w;
+    });
+
+    if (changed) {
+      const uniqueSpeakers = [
+        ...new Set(words.map((w) => w.speaker).filter(Boolean)),
+      ];
+      speakers = uniqueSpeakers;
+      if (!speakerColors[newName]) {
+        speakerColors[newName] = speakerColors[oldName];
+      }
+      pushState();
+    }
+  }
 </script>
 
 <svelte:window on:click={handleGlobalClick} on:keydown={handleGlobalKeydown} />
@@ -589,7 +613,11 @@
     <!-- Sticky Audio Bar -->
     <div class="audio-bar">
       <div class="audio-controls">
-        <button class="audio-btn" on:click={togglePlay} title="Play/Pause (Space)">
+        <button
+          class="audio-btn"
+          on:click={togglePlay}
+          title="Play/Pause (Space)"
+        >
           {#if audioPaused}
             <Play size={18} />
           {:else}
@@ -600,16 +628,16 @@
           <Square size={18} />
         </button>
       </div>
-      
+
       <div class="audio-seeker-container">
         <span class="audio-time">{formatTime(audioCurrentTime)}</span>
-        <input 
-          type="range" 
-          class="audio-seeker" 
-          min="0" 
-          max={audioDuration || 0} 
+        <input
+          type="range"
+          class="audio-seeker"
+          min="0"
+          max={audioDuration || 0}
           step="0.01"
-          bind:value={audioCurrentTime} 
+          bind:value={audioCurrentTime}
         />
         <span class="audio-time">{formatTime(audioDuration)}</span>
       </div>
@@ -682,14 +710,18 @@
                       on:focus={() => {
                         activeWordIndex = item.index;
                         if (words[item.index] && words[item.index].start) {
-                          audioCurrentTime = parseFloat(words[item.index].start);
+                          audioCurrentTime = parseFloat(
+                            words[item.index].start,
+                          );
                         }
                       }}
                       on:blur={() => pushState()}
                       on:click={() => {
                         activeWordIndex = item.index;
                         if (words[item.index] && words[item.index].start) {
-                          audioCurrentTime = parseFloat(words[item.index].start);
+                          audioCurrentTime = parseFloat(
+                            words[item.index].start,
+                          );
                         }
                       }}
                       on:keydown={(e) => handleKeydown(e, item.index)}
@@ -715,13 +747,23 @@
         <div class="legend-box">
           <h3 class="legend-title">Speakers</h3>
           <ul class="legend-list">
-            {#each speakers as sp}
+            {#each speakers as sp (sp)}
               <li class="legend-item">
                 <span
                   class="color-dot"
                   style="background-color: {speakerColors[sp]}"
                 ></span>
-                <span class="speaker-name">{sp}</span>
+                <input
+                  class="speaker-name-input"
+                  value={sp}
+                  on:blur={(e) => renameSpeaker(sp, e.target.value)}
+                  on:keydown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      e.target.blur();
+                    }
+                  }}
+                />
               </li>
             {/each}
           </ul>
@@ -1078,6 +1120,31 @@
     height: 10px;
     border-radius: 50%;
     flex-shrink: 0;
+  }
+
+  .speaker-name-input {
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-family: inherit;
+    font-size: 0.9rem;
+    color: var(--text-color);
+    width: 100%;
+    transition:
+      background-color 0.2s,
+      border-color 0.2s;
+  }
+
+  .speaker-name-input:hover {
+    background-color: rgba(255, 255, 255, 0.5);
+    border-color: rgba(0, 0, 0, 0.1);
+  }
+
+  .speaker-name-input:focus {
+    background-color: white;
+    border-color: var(--ui-color, #4a90e2);
+    outline: none;
   }
 
   .paragraph {
