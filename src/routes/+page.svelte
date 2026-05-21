@@ -1,7 +1,8 @@
 <script>
   import { onMount, tick } from 'svelte';
   import Papa from 'papaparse';
-  import { ZoomIn, ZoomOut } from '@lucide/svelte';
+  import { ZoomIn, ZoomOut, Table } from '@lucide/svelte';
+  import VirtualTable from '$lib/VirtualTable.svelte';
 
   let words = [];
   let errorMsg = '';
@@ -13,6 +14,7 @@
 
   let showUnderlines = true;
   let separateSentences = false;
+  let showTablePanel = false;
 
   let contextMenu = {
     show: false,
@@ -256,6 +258,11 @@
         Newlines
       </label>
       <div class="divider"></div>
+      <label class="toggle-label">
+        <input type="checkbox" bind:checked={showTablePanel}>
+        Data Table
+      </label>
+      <div class="divider"></div>
       <button on:click={decreaseFontSize} title="Decrease Font Size" class="icon-btn">
         <ZoomOut size={20} />
       </button>
@@ -266,7 +273,23 @@
     </div>
   </header>
 
-  <div class="content-wrapper">
+  <div class="content-wrapper {showTablePanel ? 'show-table' : ''}">
+    <!-- Left Sidebar (Table Panel) -->
+    {#if showTablePanel && !isLoading && !errorMsg}
+      <aside class="left-sidebar">
+        <div class="panel-header">
+          <h3>Data View</h3>
+        </div>
+        <div class="panel-content">
+          <VirtualTable 
+            bind:words={words} 
+            speakers={speakers} 
+            on:update={() => words = words} 
+          />
+        </div>
+      </aside>
+    {/if}
+
     <!-- Reading Area -->
     <main class="reading-area">
       {#if isLoading}
@@ -428,17 +451,54 @@
   .content-wrapper {
     display: flex;
     flex: 1;
-    max-width: 1200px;
+    max-width: 1400px;
     margin: 0 auto;
     width: 100%;
     position: relative;
+    gap: 2rem;
+    transition: max-width 0.3s ease;
+  }
+
+  .content-wrapper.show-table {
+    max-width: 100%; /* Take full width when table is open */
+    padding: 0 1rem;
+  }
+
+  /* Left Sidebar for Table */
+  .left-sidebar {
+    width: 450px;
+    display: flex;
+    flex-direction: column;
+    padding: 2rem 0;
+    align-self: stretch;
+    flex-shrink: 0;
+    border-right: 1px solid rgba(0, 0, 0, 0.05);
+    margin-right: 1rem;
+    max-height: calc(100vh - 70px); /* Height minus toolbar */
+  }
+
+  .panel-header {
+    padding: 0 1rem 1rem 1rem;
+  }
+
+  .panel-header h3 {
+    margin: 0;
+    font-family: var(--font-ui);
+    font-size: 1rem;
+    color: var(--ui-color);
+  }
+
+  .panel-content {
+    flex: 1;
+    overflow: hidden; /* VirtualTable handles its own scroll */
+    padding-right: 1rem;
   }
 
   /* Main reading area */
   .reading-area {
     flex: 1;
     max-width: 800px;
-    padding: 4rem 2rem;
+    padding: 2rem;
     width: 100%;
   }
 
