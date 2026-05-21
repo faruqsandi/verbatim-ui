@@ -17,7 +17,6 @@
   const MAX_HISTORY = 50;
 
   let showUnderlines = true;
-  let separateSentences = false;
   let showTablePanel = false;
   let activeWordIndex = null;
 
@@ -372,10 +371,6 @@
         <input type="checkbox" bind:checked={showUnderlines}>
         Underlines
       </label>
-      <label class="toggle-label">
-        <input type="checkbox" bind:checked={separateSentences}>
-        Newlines
-      </label>
       <div class="divider"></div>
       <label class="toggle-label">
         <input type="checkbox" bind:checked={showTablePanel}>
@@ -430,27 +425,40 @@
       {:else if errorMsg}
         <div class="error">{errorMsg}</div>
       {:else}
-        <article class="paragraph {separateSentences ? 'separate-sentences' : ''}">
+        <div class="chat-container">
           {#each sentenceGroups as group (group.id)}
-            <span class="sentence {group.speaker ? `speaker-sp-${speakers.indexOf(group.speaker)}` : ''}">
-              {#each group.words as item, wIdx (item.word.id)}
-                <span 
-                  id="word-{item.index}"
-                  class="word"
-                  class:active={activeWordIndex === item.index}
-                  contenteditable="true"
-                  bind:textContent={words[item.index].word}
-                  on:focus={() => activeWordIndex = item.index}
-                  on:blur={() => pushState()}
-                  on:click={() => activeWordIndex = item.index}
-                  on:keydown={(e) => handleKeydown(e, item.index)}
-                  on:contextmenu={(e) => handleContextMenu(e, item.word, item.index)}
-                  title="{item.word.speaker || 'Unknown'} • {formatTime(item.word.start)} - {formatTime(item.word.end)} • Score: {item.word.score}"
-                ></span>{#if wIdx < group.words.length - 1}{' '}{/if}
-              {/each}
-            </span>{#if group !== sentenceGroups[sentenceGroups.length - 1]}{' '}{/if}
+            <div class="chat-message">
+              <div class="message-meta">
+                <div class="speaker-avatar" style="background-color: {speakerColors[group.speaker] || '#ccc'}" title={group.speaker || 'Unknown'}></div>
+                <div class="message-time">
+                  {formatTime(group.words[0].word.start)} - {formatTime(group.words[group.words.length - 1].word.end)}
+                </div>
+                <div class="message-duration">
+                  {((parseFloat(group.words[group.words.length - 1].word.end) || 0) - (parseFloat(group.words[0].word.start) || 0)).toFixed(1)}s
+                </div>
+              </div>
+              <div class="message-content paragraph">
+                <span class="sentence {group.speaker ? `speaker-sp-${speakers.indexOf(group.speaker)}` : ''}">
+                  {#each group.words as item, wIdx (item.word.id)}
+                    <span 
+                      id="word-{item.index}"
+                      class="word"
+                      class:active={activeWordIndex === item.index}
+                      contenteditable="true"
+                      bind:textContent={words[item.index].word}
+                      on:focus={() => activeWordIndex = item.index}
+                      on:blur={() => pushState()}
+                      on:click={() => activeWordIndex = item.index}
+                      on:keydown={(e) => handleKeydown(e, item.index)}
+                      on:contextmenu={(e) => handleContextMenu(e, item.word, item.index)}
+                      title="{item.word.speaker || 'Unknown'} • {formatTime(item.word.start)} - {formatTime(item.word.end)} • Score: {item.word.score}"
+                    ></span>{#if wIdx < group.words.length - 1}{' '}{/if}
+                  {/each}
+                </span>
+              </div>
+            </div>
           {/each}
-        </article>
+        </div>
       {/if}
     </main>
 
@@ -710,13 +718,55 @@
     /* Base size is 18px, dynamically scaled */
     font-size: calc(var(--base-size) * var(--dynamic-scale));
     line-height: 1.8;
-    text-align: justify;
+    text-align: left;
     transition: font-size 0.2s ease-out;
   }
 
-  .paragraph.separate-sentences .sentence {
-    display: block;
-    margin-bottom: 0.75rem;
+  .chat-container {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    padding-bottom: 2rem;
+  }
+
+  .chat-message {
+    display: flex;
+    gap: 1.25rem;
+    align-items: flex-start;
+  }
+
+  .message-meta {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 80px;
+    flex-shrink: 0;
+    margin-top: 0.25rem;
+  }
+
+  .speaker-avatar {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    margin-bottom: 0.5rem;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+  }
+
+  .message-time {
+    font-family: var(--font-ui);
+    font-size: 0.75rem;
+    color: #666;
+    text-align: center;
+    line-height: 1.4;
+    white-space: nowrap;
+  }
+
+  .message-duration {
+    font-family: var(--font-ui);
+    font-size: 0.7rem;
+    color: #999;
+    text-align: center;
+    line-height: 1.4;
   }
 
   .word {
