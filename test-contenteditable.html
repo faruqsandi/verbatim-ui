@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html>
+<body>
+  <div>
+    <span contenteditable="true" onfocus="console.log('focus 1')">Word</span>
+    <span contenteditable="true">Two</span>
+    <span contenteditable="true">Three</span>
+  </div>
+  <div>
+    <span tabindex="0" onclick="this.contentEditable='true'; this.focus()" onblur="this.contentEditable='false'">Click</span>
+    <span tabindex="0" onclick="this.contentEditable='true'; this.focus()" onblur="this.contentEditable='false'">Me</span>
+  </div>
+</body>
+</html>
