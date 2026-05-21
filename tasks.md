@@ -3,7 +3,7 @@
 - [x] Implement word-level timestamps UI
 - [x] Implement edit/reassign/split/delete actions
 - [x] Add persistence (localStorage)
-- [ ] Verify app runs (dev instructions)
+- [x] Verify app runs (dev instructions)
 
 Priority: Next -> Implement word-range split (select multiple words and split them into a new bubble assigned to a speaker)
 
