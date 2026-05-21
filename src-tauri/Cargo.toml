@@ -1,7 +1,0 @@
-[package]
-name = "verbatim_ui"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-tauri = { version = "^1.4", features = ["api-all"] }
