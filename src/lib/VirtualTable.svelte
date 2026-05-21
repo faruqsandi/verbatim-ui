@@ -3,6 +3,7 @@
   
   export let words = [];
   export let speakers = [];
+  export let activeWordIndex = null;
 
   const dispatch = createEventDispatcher();
 
@@ -44,6 +45,20 @@
     const sec = (s % 60).toFixed(2); // Two decimal places for table
     return `${m}:${sec.padStart(5, '0')}`;
   }
+
+  // Auto-scroll when activeWordIndex changes externally
+  $: if (activeWordIndex !== null && activeWordIndex !== undefined && viewport) {
+    // Check if the row is outside the current viewport
+    const rowTop = activeWordIndex * itemHeight;
+    const rowBottom = rowTop + itemHeight;
+    const isVisible = rowTop >= scrollTop && rowBottom <= (scrollTop + viewportHeight);
+    
+    if (!isVisible) {
+      // Center the row in the viewport
+      const targetScroll = Math.max(0, rowTop - (viewportHeight / 2) + (itemHeight / 2));
+      viewport.scrollTo({ top: targetScroll, behavior: 'smooth' });
+    }
+  }
 </script>
 
 <div class="table-viewport" bind:this={viewport} on:scroll={handleScroll} bind:clientHeight={viewportHeight}>
@@ -65,7 +80,10 @@
       {/if}
 
       {#each visibleWords as item (item.id)}
-        <tr style="height: {itemHeight}px">
+        <tr 
+          style="height: {itemHeight}px" 
+          class:active-row={activeWordIndex === item.originalIndex}
+        >
           <td class="cell-id" title={item.id}>{item.id.slice(0, 4)}</td>
           <td class="cell-word">
             <input 
@@ -162,10 +180,19 @@
 
   tr:not(.padding-row) {
     border-bottom: 1px solid rgba(0, 0, 0, 0.03);
+    transition: background-color 0.2s;
   }
   
   tr:not(.padding-row):hover {
     background-color: rgba(255, 255, 255, 0.8);
+  }
+
+  tr.active-row {
+    background-color: rgba(59, 130, 246, 0.1) !important;
+  }
+  
+  tr.active-row td:first-child {
+    box-shadow: inset 3px 0 0 #3b82f6;
   }
 
   td {

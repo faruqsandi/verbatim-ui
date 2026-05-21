@@ -15,6 +15,7 @@
   let showUnderlines = true;
   let separateSentences = false;
   let showTablePanel = false;
+  let activeWordIndex = null;
 
   let contextMenu = {
     show: false,
@@ -225,8 +226,9 @@
     }
   }
 
-  function handleContextMenu(e, wordData) {
+  function handleContextMenu(e, wordData, index) {
     e.preventDefault();
+    activeWordIndex = index;
     contextMenu = {
       show: true,
       x: e.clientX,
@@ -284,6 +286,7 @@
           <VirtualTable 
             bind:words={words} 
             speakers={speakers} 
+            bind:activeWordIndex={activeWordIndex}
             on:update={() => words = words} 
           />
         </div>
@@ -304,10 +307,13 @@
                 <span 
                   id="word-{item.index}"
                   class="word"
+                  class:active={activeWordIndex === item.index}
                   contenteditable="true"
                   bind:textContent={words[item.index].word}
+                  on:focus={() => activeWordIndex = item.index}
+                  on:click={() => activeWordIndex = item.index}
                   on:keydown={(e) => handleKeydown(e, item.index)}
-                  on:contextmenu={(e) => handleContextMenu(e, item.word)}
+                  on:contextmenu={(e) => handleContextMenu(e, item.word, item.index)}
                   title="{item.word.speaker || 'Unknown'} • {formatTime(item.word.start)} - {formatTime(item.word.end)} • Score: {item.word.score}"
                 ></span>{#if wIdx < group.words.length - 1}{' '}{/if}
               {/each}
@@ -584,8 +590,8 @@
   }
 
   /* Subtle hover effect to keep it distraction-free but interactive */
-  .word:hover {
-    background-color: rgba(74, 144, 226, 0.1);
+  .word:hover, .word.active {
+    background-color: rgba(74, 144, 226, 0.15);
     color: var(--accent-color);
   }
 
