@@ -76,10 +76,10 @@
         {#each words as wordItem, i}
           <span 
             class="word" 
+            contenteditable="true"
+            bind:textContent={wordItem.word}
             title="{wordItem.speaker || 'Unknown'} • {formatTime(wordItem.start)} - {formatTime(wordItem.end)} • Score: {wordItem.score}"
-          >
-            {wordItem.word}
-          </span>
+          ></span>
           {' '}
         {/each}
       </article>
@@ -170,11 +170,12 @@
 
   .word {
     display: inline-block;
-    cursor: default;
+    cursor: text;
     border-radius: 4px;
     padding: 0 1px;
     margin: 0 -1px;
     transition: background-color 0.2s, color 0.2s;
+    outline: none;
   }
 
   /* Subtle hover effect to keep it distraction-free but interactive */
