@@ -702,6 +702,8 @@
                 >
                   {#each group.words as item, wIdx (item.word.id)}
                     <span
+                      role="textbox"
+                      tabindex="0"
                       id="word-{item.index}"
                       class="word"
                       class:active={activeWordIndex === item.index}
