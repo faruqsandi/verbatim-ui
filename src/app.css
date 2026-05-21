@@ -1,0 +1,33 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Lora:ital,wght@0,400;0,500;0,600;1,400&display=swap');
+
+:root {
+  --bg-color: #fdfbf7; /* Off-white, slightly warm */
+  --text-color: #2b2b2b; /* Soft black, easier on the eyes */
+  --accent-color: #4a90e2;
+  --ui-color: #888;
+  --ui-bg: #ffffff;
+  --font-reading: 'Lora', serif;
+  --font-ui: 'Inter', sans-serif;
+  
+  --base-size: 18px;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  font-family: var(--font-reading);
+  font-size: var(--base-size);
+  line-height: 1.8;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+button {
+  font-family: var(--font-ui);
+}

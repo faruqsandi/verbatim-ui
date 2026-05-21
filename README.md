@@ -1,10 +1,7 @@
-# verbatim-ui
+# Tauri + SvelteKit
 
-Tauri + Svelte prototype for speech-to-text diarization editor.
+This template should help get you started developing with Tauri and SvelteKit in Vite.
 
-Run:
+## Recommended IDE Setup
 
-1. Install dependencies: `npm install`
-2. Start dev server: `npm run dev`
-3. In another terminal, run Tauri dev: `npm run tauri:dev` (requires Rust + Tauri)
-# verbatim-ui
+[VS Code](https://code.visualstudio.com/) + [Svelte](https://marketplace.visualstudio.com/items?itemName=svelte.svelte-vscode) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer).
