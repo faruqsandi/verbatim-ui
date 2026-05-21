@@ -1,7 +1,7 @@
 <script>
   import { onMount, tick } from 'svelte';
   import Papa from 'papaparse';
-  import { ZoomIn, ZoomOut, Table } from '@lucide/svelte';
+  import { ZoomIn, ZoomOut, Table, Upload, Save, Undo, Redo } from '@lucide/svelte';
   import VirtualTable from '$lib/VirtualTable.svelte';
 
   let words = [];
@@ -10,7 +10,11 @@
   let speakers = [];
   let speakerColors = {};
 
-  let dynamicStyleElement;
+  let fileInput;
+
+  let history = [];
+  let currentHistoryIndex = -1;
+  const MAX_HISTORY = 50;
 
   let showUnderlines = true;
   let separateSentences = false;
@@ -38,6 +42,114 @@
   // Font size multiplier
   let fontScale = 1.0;
 
+  function pushState() {
+    const newStr = JSON.stringify(words);
+    if (currentHistoryIndex >= 0 && currentHistoryIndex < history.length) {
+      const currentStateStr = JSON.stringify(history[currentHistoryIndex]);
+      if (currentStateStr === newStr) return; // no change
+    }
+
+    if (currentHistoryIndex < history.length - 1) {
+      history = history.slice(0, currentHistoryIndex + 1);
+    }
+    
+    history.push(JSON.parse(newStr));
+    
+    if (history.length > MAX_HISTORY) {
+      history.shift();
+    } else {
+      currentHistoryIndex++;
+    }
+  }
+
+  function undo() {
+    if (currentHistoryIndex > 0) {
+      currentHistoryIndex--;
+      words = JSON.parse(JSON.stringify(history[currentHistoryIndex]));
+    }
+  }
+  
+  function redo() {
+    if (currentHistoryIndex < history.length - 1) {
+      currentHistoryIndex++;
+      words = JSON.parse(JSON.stringify(history[currentHistoryIndex]));
+    }
+  }
+
+  function saveCsv() {
+    const csvStr = Papa.unparse(words.map(w => {
+      // Remove internal properties
+      const { id, originalIndex, ...rest } = w;
+      return rest;
+    }));
+    const blob = new Blob([csvStr], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', 'transcript_edited.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
+
+  function triggerFileInput() {
+    if (fileInput) fileInput.click();
+  }
+
+  function handleFileUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    isLoading = true;
+    errorMsg = '';
+    
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: (results) => {
+        words = results.data.map(w => ({ ...w, id: Math.random().toString(36).substring(2, 10) }));
+        
+        const uniqueSpeakers = [...new Set(words.map(w => w.speaker).filter(Boolean))];
+        speakers = uniqueSpeakers;
+        uniqueSpeakers.forEach((sp, idx) => {
+          speakerColors[sp] = palette[idx % palette.length];
+        });
+        
+        history = [];
+        currentHistoryIndex = -1;
+        pushState();
+        
+        isLoading = false;
+      },
+      error: (err) => {
+        errorMsg = err.message;
+        isLoading = false;
+      }
+    });
+  }
+
+  function handleGlobalKeydown(e) {
+    if (e.ctrlKey && (e.key === 'z' || e.key === 'Z')) {
+      const isEditing = document.activeElement && 
+        (document.activeElement.hasAttribute('contenteditable') || 
+         document.activeElement.tagName === 'INPUT');
+         
+      if (!isEditing) {
+        e.preventDefault();
+        if (e.shiftKey) {
+          redo();
+        } else {
+          undo();
+        }
+      }
+    }
+    if (e.ctrlKey && (e.key === 's' || e.key === 'S')) {
+      e.preventDefault();
+      saveCsv();
+    }
+  }
+
   $: sentenceGroups = words.length > 0 ? words.reduce((groups, word, index) => {
     const lastGroup = groups[groups.length - 1];
     if (lastGroup && lastGroup.speaker === word.speaker) {
@@ -52,23 +164,7 @@
     return groups;
   }, []) : [];
 
-  // Reactively update the dynamic style element when speakers or colors change
-  $: if (dynamicStyleElement && speakers.length > 0 && (showUnderlines || !showUnderlines)) {
-    const rules = speakers.map((sp, idx) => {
-      return `
-        .speaker-sp-${idx} {
-          ${showUnderlines ? `text-decoration: ${speakerColors[sp]} underline 1.5px; text-underline-offset: 4px;` : ''}
-        }
-      `;
-    }).join('\n');
-    dynamicStyleElement.textContent = rules;
-  }
-
   onMount(async () => {
-    // Create a style element for dynamic speaker classes
-    dynamicStyleElement = document.createElement('style');
-    document.head.appendChild(dynamicStyleElement);
-
     try {
       const response = await fetch('/result.csv');
       const csvStr = await response.text();
@@ -83,6 +179,10 @@
           uniqueSpeakers.forEach((sp, idx) => {
             speakerColors[sp] = palette[idx % palette.length];
           });
+          
+          history = [];
+          currentHistoryIndex = -1;
+          pushState();
           
           isLoading = false;
         },
@@ -136,6 +236,7 @@
         
         words.splice(index, 1);
         words = words;
+        pushState();
         
         await tick();
         
@@ -169,6 +270,7 @@
         
         words.splice(index + 1, 1);
         words = words;
+        pushState();
         
         await tick();
         
@@ -244,7 +346,22 @@
   }
 </script>
 
-<svelte:window on:click={handleGlobalClick} />
+<svelte:window on:click={handleGlobalClick} on:keydown={handleGlobalKeydown} />
+
+<input type="file" accept=".csv" style="display: none;" bind:this={fileInput} on:change={handleFileUpload} />
+
+<svelte:head>
+  {@html `<style>
+    ${speakers.map((sp, idx) => `
+      .speaker-sp-${idx} {
+        text-decoration: ${showUnderlines ? 'underline' : 'none'};
+        text-decoration-color: ${speakerColors[sp] || 'transparent'};
+        text-decoration-thickness: 1.5px;
+        text-underline-offset: 4px;
+      }
+    `).join('\n')}
+  </style>`}
+</svelte:head>
 
 <div class="app-container" style="--dynamic-scale: {fontScale}">
   <!-- Top Toolbar -->
@@ -264,6 +381,19 @@
         <input type="checkbox" bind:checked={showTablePanel}>
         Data Table
       </label>
+      <div class="divider"></div>
+      <button on:click={triggerFileInput} title="Load CSV" class="icon-btn">
+        <Upload size={20} />
+      </button>
+      <button on:click={saveCsv} title="Save CSV (Ctrl+S)" class="icon-btn">
+        <Save size={20} />
+      </button>
+      <button on:click={undo} disabled={currentHistoryIndex <= 0} title="Undo (Ctrl+Z)" class="icon-btn" class:disabled={currentHistoryIndex <= 0}>
+        <Undo size={20} />
+      </button>
+      <button on:click={redo} disabled={currentHistoryIndex >= history.length - 1} title="Redo (Ctrl+Shift+Z)" class="icon-btn" class:disabled={currentHistoryIndex >= history.length - 1}>
+        <Redo size={20} />
+      </button>
       <div class="divider"></div>
       <button on:click={decreaseFontSize} title="Decrease Font Size" class="icon-btn">
         <ZoomOut size={20} />
@@ -287,7 +417,7 @@
             bind:words={words} 
             speakers={speakers} 
             bind:activeWordIndex={activeWordIndex}
-            on:update={() => words = words} 
+            on:update={() => { words = words; pushState(); }} 
           />
         </div>
       </aside>
@@ -311,6 +441,7 @@
                   contenteditable="true"
                   bind:textContent={words[item.index].word}
                   on:focus={() => activeWordIndex = item.index}
+                  on:blur={() => pushState()}
                   on:click={() => activeWordIndex = item.index}
                   on:keydown={(e) => handleKeydown(e, item.index)}
                   on:contextmenu={(e) => handleContextMenu(e, item.word, item.index)}
@@ -354,7 +485,7 @@
         <select 
           class="speaker-select" 
           bind:value={contextMenu.word.speaker} 
-          on:change={() => { words = words; contextMenu.show = false; }}
+          on:change={() => { words = words; contextMenu.show = false; pushState(); }}
         >
           {#each speakers as sp}
             <option value={sp}>{sp}</option>
@@ -452,6 +583,12 @@
 
   .icon-btn:active {
     transform: scale(0.95);
+  }
+
+  .icon-btn.disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+    transform: none;
   }
 
   .content-wrapper {

@@ -90,7 +90,7 @@
               type="text" 
               class="inline-input" 
               bind:value={words[item.originalIndex].word} 
-              on:input={handleUpdate} 
+              on:blur={handleUpdate} 
             />
           </td>
           <td class="cell-speaker">
