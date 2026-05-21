@@ -4,7 +4,7 @@
 
   export let b
 
-  let editing = false
+  let editing = (b.words && b.words.length===1 && b.words[0].text.trim()==='')
   let editText = ''
   let selectedWordIndex = -1
   let assignSpeaker = ''
@@ -15,6 +15,10 @@
     editing = true
     editText = b.words.map(w=>w.text).join(' ')
   }
+
+$: if (!editing && b.words && b.words.length===1 && b.words[0].text.trim()===''){
+  editing = true
+}
 
   function saveEdit(){
     const words = editText.split(/\s+/).filter(Boolean).map((t,i)=>({text:t, ts: b.words[i]?.ts || '00:00:00'}))

@@ -2,33 +2,28 @@
   import { state, updateState } from '../stores'
   import ChatBubble from './ChatBubble.svelte'
 
-  let newText = ''
-  let newSpeaker = ''
-
   $: speakers = $state.speakers
 
-  function addBubble(){
-    if(!newText) return
+  function addBubbleAt(index){
     const id = 'b' + Date.now()
-    const words = newText.split(/\s+/).filter(Boolean).map((w,i)=>({text:w, ts: '--:--:' + (i+1)}))
-    $state.bubbles.push({ id, speakerId: newSpeaker || $state.speakers[0].id, words })
+    const speakerId = $state.speakers[0]?.id || 'sp1'
+    const words = [{ text: '', ts: '00:00:00' }]
+    $state.bubbles.splice(index, 0, { id, speakerId, words })
     updateState(()=>{})
-    newText=''
   }
 </script>
 
 <div>
-  <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center">
-    <input placeholder="Add bubble text" bind:value={newText} style="flex:1" />
-    <select bind:value={newSpeaker}>
-      {#each $state.speakers as sp}
-        <option value={sp.id}>{sp.name}</option>
-      {/each}
-    </select>
-    <button class="btn" on:click={addBubble}>Add</button>
-  </div>
-
-  {#each $state.bubbles as b (b.id)}
-    <ChatBubble {b} />
+  {#each $state.bubbles as b, i (b.id)}
+    <div class="gap-wrapper">
+      <div class="gap" on:click={() => addBubbleAt(i)}>
+        <span class="gap-text">+ add bubble</span>
+      </div>
+      <ChatBubble {b} />
+    </div>
   {/each}
+
+  <div class="gap" style="margin-top:8px;text-align:center" on:click={() => addBubbleAt($state.bubbles.length)}>
+    <span class="gap-text">+ add bubble</span>
+  </div>
 </div>
