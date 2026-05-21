@@ -1,11 +1,19 @@
 <script>
-  import { onMount, tick } from 'svelte';
-  import Papa from 'papaparse';
-  import { ZoomIn, ZoomOut, Table, Upload, Save, Undo, Redo } from '@lucide/svelte';
-  import VirtualTable from '$lib/VirtualTable.svelte';
+  import { onMount, tick } from "svelte";
+  import Papa from "papaparse";
+  import {
+    ZoomIn,
+    ZoomOut,
+    Table,
+    Upload,
+    Save,
+    Undo,
+    Redo,
+  } from "@lucide/svelte";
+  import VirtualTable from "$lib/VirtualTable.svelte";
 
   let words = [];
-  let errorMsg = '';
+  let errorMsg = "";
   let isLoading = true;
   let speakers = [];
   let speakerColors = {};
@@ -24,18 +32,19 @@
     show: false,
     x: 0,
     y: 0,
-    word: null
+    word: null,
+    showDropdown: false,
   };
 
   const palette = [
-    '#3b82f6', // blue-500
-    '#10b981', // emerald-500
-    '#f59e0b', // amber-500
-    '#ef4444', // red-500
-    '#8b5cf6', // violet-500
-    '#ec4899', // pink-500
-    '#06b6d4', // cyan-500
-    '#f97316'  // orange-500
+    "#3b82f6", // blue-500
+    "#10b981", // emerald-500
+    "#f59e0b", // amber-500
+    "#ef4444", // red-500
+    "#8b5cf6", // violet-500
+    "#ec4899", // pink-500
+    "#06b6d4", // cyan-500
+    "#f97316", // orange-500
   ];
 
   // Font size multiplier
@@ -51,9 +60,9 @@
     if (currentHistoryIndex < history.length - 1) {
       history = history.slice(0, currentHistoryIndex + 1);
     }
-    
+
     history.push(JSON.parse(newStr));
-    
+
     if (history.length > MAX_HISTORY) {
       history.shift();
     } else {
@@ -67,7 +76,7 @@
       words = JSON.parse(JSON.stringify(history[currentHistoryIndex]));
     }
   }
-  
+
   function redo() {
     if (currentHistoryIndex < history.length - 1) {
       currentHistoryIndex++;
@@ -76,16 +85,18 @@
   }
 
   function saveCsv() {
-    const csvStr = Papa.unparse(words.map(w => {
-      // Remove internal properties
-      const { id, originalIndex, ...rest } = w;
-      return rest;
-    }));
-    const blob = new Blob([csvStr], { type: 'text/csv;charset=utf-8;' });
+    const csvStr = Papa.unparse(
+      words.map((w) => {
+        // Remove internal properties
+        const { id, originalIndex, ...rest } = w;
+        return rest;
+      }),
+    );
+    const blob = new Blob([csvStr], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
+    const link = document.createElement("a");
     link.href = url;
-    link.setAttribute('download', 'transcript_edited.csv');
+    link.setAttribute("download", "transcript_edited.csv");
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -101,39 +112,45 @@
     if (!file) return;
 
     isLoading = true;
-    errorMsg = '';
-    
+    errorMsg = "";
+
     Papa.parse(file, {
       header: true,
       skipEmptyLines: true,
       complete: (results) => {
-        words = results.data.map(w => ({ ...w, id: Math.random().toString(36).substring(2, 10) }));
-        
-        const uniqueSpeakers = [...new Set(words.map(w => w.speaker).filter(Boolean))];
+        words = results.data.map((w) => ({
+          ...w,
+          id: Math.random().toString(36).substring(2, 10),
+        }));
+
+        const uniqueSpeakers = [
+          ...new Set(words.map((w) => w.speaker).filter(Boolean)),
+        ];
         speakers = uniqueSpeakers;
         uniqueSpeakers.forEach((sp, idx) => {
           speakerColors[sp] = palette[idx % palette.length];
         });
-        
+
         history = [];
         currentHistoryIndex = -1;
         pushState();
-        
+
         isLoading = false;
       },
       error: (err) => {
         errorMsg = err.message;
         isLoading = false;
-      }
+      },
     });
   }
 
   function handleGlobalKeydown(e) {
-    if (e.ctrlKey && (e.key === 'z' || e.key === 'Z')) {
-      const isEditing = document.activeElement && 
-        (document.activeElement.hasAttribute('contenteditable') || 
-         document.activeElement.tagName === 'INPUT');
-         
+    if (e.ctrlKey && (e.key === "z" || e.key === "Z")) {
+      const isEditing =
+        document.activeElement &&
+        (document.activeElement.hasAttribute("contenteditable") ||
+          document.activeElement.tagName === "INPUT");
+
       if (!isEditing) {
         e.preventDefault();
         if (e.shiftKey) {
@@ -143,52 +160,60 @@
         }
       }
     }
-    if (e.ctrlKey && (e.key === 's' || e.key === 'S')) {
+    if (e.ctrlKey && (e.key === "s" || e.key === "S")) {
       e.preventDefault();
       saveCsv();
     }
   }
 
-  $: sentenceGroups = words.length > 0 ? words.reduce((groups, word, index) => {
-    const lastGroup = groups[groups.length - 1];
-    if (lastGroup && lastGroup.speaker === word.speaker) {
-      lastGroup.words.push({ word, index });
-    } else {
-      groups.push({
-        id: word.id, // Stable ID based on the first word
-        speaker: word.speaker,
-        words: [{ word, index }]
-      });
-    }
-    return groups;
-  }, []) : [];
+  $: sentenceGroups =
+    words.length > 0
+      ? words.reduce((groups, word, index) => {
+          const lastGroup = groups[groups.length - 1];
+          if (lastGroup && lastGroup.speaker === word.speaker) {
+            lastGroup.words.push({ word, index });
+          } else {
+            groups.push({
+              id: word.id, // Stable ID based on the first word
+              speaker: word.speaker,
+              words: [{ word, index }],
+            });
+          }
+          return groups;
+        }, [])
+      : [];
 
   onMount(async () => {
     try {
-      const response = await fetch('/result.csv');
+      const response = await fetch("/result.csv");
       const csvStr = await response.text();
       Papa.parse(csvStr, {
         header: true,
         skipEmptyLines: true,
         complete: (results) => {
-          words = results.data.map(w => ({ ...w, id: Math.random().toString(36).substring(2, 10) }));
-          
-          const uniqueSpeakers = [...new Set(words.map(w => w.speaker).filter(Boolean))];
+          words = results.data.map((w) => ({
+            ...w,
+            id: Math.random().toString(36).substring(2, 10),
+          }));
+
+          const uniqueSpeakers = [
+            ...new Set(words.map((w) => w.speaker).filter(Boolean)),
+          ];
           speakers = uniqueSpeakers;
           uniqueSpeakers.forEach((sp, idx) => {
             speakerColors[sp] = palette[idx % palette.length];
           });
-          
+
           history = [];
           currentHistoryIndex = -1;
           pushState();
-          
+
           isLoading = false;
         },
         error: (err) => {
           errorMsg = err.message;
           isLoading = false;
-        }
+        },
       });
     } catch (e) {
       errorMsg = e.toString();
@@ -206,11 +231,11 @@
 
   // Format time for tooltip
   function formatTime(seconds) {
-    if (!seconds) return '0:00';
+    if (!seconds) return "0:00";
     const s = parseFloat(seconds);
     const m = Math.floor(s / 60);
     const sec = Math.floor(s % 60);
-    return `${m}:${sec.toString().padStart(2, '0')}`;
+    return `${m}:${sec.toString().padStart(2, "0")}`;
   }
 
   async function handleKeydown(e, index) {
@@ -220,25 +245,25 @@
     const caretPos = selection.anchorOffset;
     const textLen = e.target.textContent.length;
 
-    if (e.key === 'Backspace' && caretPos === 0) {
+    if (e.key === "Backspace" && caretPos === 0) {
       if (index > 0) {
         e.preventDefault();
         const prevWord = words[index - 1];
         const currWord = words[index];
-        
+
         const prevLength = prevWord.word.length;
-        
+
         words[index - 1].word = prevWord.word + currWord.word;
         if (currWord.end) {
           words[index - 1].end = currWord.end;
         }
-        
+
         words.splice(index, 1);
         words = words;
         pushState();
-        
+
         await tick();
-        
+
         const prevEl = document.getElementById(`word-${index - 1}`);
         if (prevEl) {
           prevEl.focus();
@@ -254,25 +279,25 @@
           sel.addRange(range);
         }
       }
-    } else if (e.key === 'Delete' && caretPos === textLen) {
+    } else if (e.key === "Delete" && caretPos === textLen) {
       if (index < words.length - 1) {
         e.preventDefault();
         const currWord = words[index];
         const nextWord = words[index + 1];
-        
+
         const currLength = currWord.word.length;
-        
+
         words[index].word = currWord.word + nextWord.word;
         if (nextWord.end) {
           words[index].end = nextWord.end;
         }
-        
+
         words.splice(index + 1, 1);
         words = words;
         pushState();
-        
+
         await tick();
-        
+
         const currEl = document.getElementById(`word-${index}`);
         if (currEl) {
           currEl.focus();
@@ -288,7 +313,7 @@
           sel.addRange(range);
         }
       }
-    } else if (e.key === 'ArrowLeft' && caretPos === 0) {
+    } else if (e.key === "ArrowLeft" && caretPos === 0) {
       if (index > 0) {
         e.preventDefault();
         const prevEl = document.getElementById(`word-${index - 1}`);
@@ -306,7 +331,7 @@
           sel.addRange(range);
         }
       }
-    } else if (e.key === 'ArrowRight' && caretPos === textLen) {
+    } else if (e.key === "ArrowRight" && caretPos === textLen) {
       if (index < words.length - 1) {
         e.preventDefault();
         const nextEl = document.getElementById(`word-${index + 1}`);
@@ -334,7 +359,8 @@
       show: true,
       x: e.clientX,
       y: e.clientY,
-      word: wordData
+      word: wordData,
+      showDropdown: false,
     };
   }
 
@@ -347,18 +373,28 @@
 
 <svelte:window on:click={handleGlobalClick} on:keydown={handleGlobalKeydown} />
 
-<input type="file" accept=".csv" style="display: none;" bind:this={fileInput} on:change={handleFileUpload} />
+<input
+  type="file"
+  accept=".csv"
+  style="display: none;"
+  bind:this={fileInput}
+  on:change={handleFileUpload}
+/>
 
 <svelte:head>
   {@html `<style>
-    ${speakers.map((sp, idx) => `
+    ${speakers
+      .map(
+        (sp, idx) => `
       .speaker-sp-${idx} {
-        text-decoration: ${showUnderlines ? 'underline' : 'none'};
-        text-decoration-color: ${speakerColors[sp] || 'transparent'};
+        text-decoration: ${showUnderlines ? "underline" : "none"};
+        text-decoration-color: ${speakerColors[sp] || "transparent"};
         text-decoration-thickness: 1.5px;
         text-underline-offset: 4px;
       }
-    `).join('\n')}
+    `,
+      )
+      .join("\n")}
   </style>`}
 </svelte:head>
 
@@ -368,12 +404,12 @@
     <div class="toolbar-title">Reader</div>
     <div class="font-controls">
       <label class="toggle-label">
-        <input type="checkbox" bind:checked={showUnderlines}>
+        <input type="checkbox" bind:checked={showUnderlines} />
         Underlines
       </label>
       <div class="divider"></div>
       <label class="toggle-label">
-        <input type="checkbox" bind:checked={showTablePanel}>
+        <input type="checkbox" bind:checked={showTablePanel} />
         Data Table
       </label>
       <div class="divider"></div>
@@ -383,18 +419,38 @@
       <button on:click={saveCsv} title="Save CSV (Ctrl+S)" class="icon-btn">
         <Save size={20} />
       </button>
-      <button on:click={undo} disabled={currentHistoryIndex <= 0} title="Undo (Ctrl+Z)" class="icon-btn" class:disabled={currentHistoryIndex <= 0}>
+      <button
+        on:click={undo}
+        disabled={currentHistoryIndex <= 0}
+        title="Undo (Ctrl+Z)"
+        class="icon-btn"
+        class:disabled={currentHistoryIndex <= 0}
+      >
         <Undo size={20} />
       </button>
-      <button on:click={redo} disabled={currentHistoryIndex >= history.length - 1} title="Redo (Ctrl+Shift+Z)" class="icon-btn" class:disabled={currentHistoryIndex >= history.length - 1}>
+      <button
+        on:click={redo}
+        disabled={currentHistoryIndex >= history.length - 1}
+        title="Redo (Ctrl+Shift+Z)"
+        class="icon-btn"
+        class:disabled={currentHistoryIndex >= history.length - 1}
+      >
         <Redo size={20} />
       </button>
       <div class="divider"></div>
-      <button on:click={decreaseFontSize} title="Decrease Font Size" class="icon-btn">
+      <button
+        on:click={decreaseFontSize}
+        title="Decrease Font Size"
+        class="icon-btn"
+      >
         <ZoomOut size={20} />
       </button>
       <div class="scale-indicator">{Math.round(fontScale * 100)}%</div>
-      <button on:click={increaseFontSize} title="Increase Font Size" class="icon-btn">
+      <button
+        on:click={increaseFontSize}
+        title="Increase Font Size"
+        class="icon-btn"
+      >
         <ZoomIn size={20} />
       </button>
     </div>
@@ -408,11 +464,14 @@
           <h3>Data View</h3>
         </div>
         <div class="panel-content">
-          <VirtualTable 
-            bind:words={words} 
-            speakers={speakers} 
-            bind:activeWordIndex={activeWordIndex}
-            on:update={() => { words = words; pushState(); }} 
+          <VirtualTable
+            bind:words
+            {speakers}
+            bind:activeWordIndex
+            on:update={() => {
+              words = words;
+              pushState();
+            }}
           />
         </div>
       </aside>
@@ -429,30 +488,48 @@
           {#each sentenceGroups as group (group.id)}
             <div class="chat-message">
               <div class="message-meta">
-                <div class="speaker-avatar" style="background-color: {speakerColors[group.speaker] || '#ccc'}" title={group.speaker || 'Unknown'}></div>
+                <div
+                  class="speaker-avatar"
+                  style="background-color: {speakerColors[group.speaker] ||
+                    '#ccc'}"
+                  title={group.speaker || "Unknown"}
+                ></div>
                 <div class="message-time">
-                  {formatTime(group.words[0].word.start)} - {formatTime(group.words[group.words.length - 1].word.end)}
+                  {formatTime(group.words[0].word.start)} - {formatTime(
+                    group.words[group.words.length - 1].word.end,
+                  )}
                 </div>
                 <div class="message-duration">
-                  {((parseFloat(group.words[group.words.length - 1].word.end) || 0) - (parseFloat(group.words[0].word.start) || 0)).toFixed(1)}s
+                  {(
+                    (parseFloat(group.words[group.words.length - 1].word.end) ||
+                      0) - (parseFloat(group.words[0].word.start) || 0)
+                  ).toFixed(1)}s
                 </div>
               </div>
               <div class="message-content paragraph">
-                <span class="sentence {group.speaker ? `speaker-sp-${speakers.indexOf(group.speaker)}` : ''}">
+                <span
+                  class="sentence {group.speaker
+                    ? `speaker-sp-${speakers.indexOf(group.speaker)}`
+                    : ''}"
+                >
                   {#each group.words as item, wIdx (item.word.id)}
-                    <span 
+                    <span
                       id="word-{item.index}"
                       class="word"
                       class:active={activeWordIndex === item.index}
                       contenteditable="true"
                       bind:textContent={words[item.index].word}
-                      on:focus={() => activeWordIndex = item.index}
+                      on:focus={() => (activeWordIndex = item.index)}
                       on:blur={() => pushState()}
-                      on:click={() => activeWordIndex = item.index}
+                      on:click={() => (activeWordIndex = item.index)}
                       on:keydown={(e) => handleKeydown(e, item.index)}
-                      on:contextmenu={(e) => handleContextMenu(e, item.word, item.index)}
-                      title="{item.word.speaker || 'Unknown'} • {formatTime(item.word.start)} - {formatTime(item.word.end)} • Score: {item.word.score}"
-                    ></span>{#if wIdx < group.words.length - 1}{' '}{/if}
+                      on:contextmenu={(e) =>
+                        handleContextMenu(e, item.word, item.index)}
+                      title="{item.word.speaker || 'Unknown'} • {formatTime(
+                        item.word.start,
+                      )} - {formatTime(item.word.end)} • Score: {item.word
+                        .score}"
+                    ></span>{#if wIdx < group.words.length - 1}{" "}{/if}
                   {/each}
                 </span>
               </div>
@@ -470,7 +547,10 @@
           <ul class="legend-list">
             {#each speakers as sp}
               <li class="legend-item">
-                <span class="color-dot" style="background-color: {speakerColors[sp]}"></span>
+                <span
+                  class="color-dot"
+                  style="background-color: {speakerColors[sp]}"
+                ></span>
                 <span class="speaker-name">{sp}</span>
               </li>
             {/each}
@@ -483,25 +563,58 @@
   {#if contextMenu.show && contextMenu.word}
     <!-- svelte-ignore a11y-click-events-have-key-events -->
     <!-- svelte-ignore a11y-no-static-element-interactions -->
-    <div 
-      class="context-menu" 
+    <div
+      class="context-menu"
       style="left: {contextMenu.x}px; top: {contextMenu.y}px;"
       on:click|stopPropagation
     >
-      <div class="menu-item">
+      <div class="menu-item custom-dropdown-wrapper">
         <strong>Speaker:</strong>
-        <select 
-          class="speaker-select" 
-          bind:value={contextMenu.word.speaker} 
-          on:change={() => { words = words; contextMenu.show = false; pushState(); }}
-        >
-          {#each speakers as sp}
-            <option value={sp}>{sp}</option>
-          {/each}
-        </select>
+
+        <div class="custom-select-container">
+          <button
+            class="custom-select-btn"
+            on:click={() =>
+              (contextMenu.showDropdown = !contextMenu.showDropdown)}
+          >
+            <span
+              class="color-dot"
+              style="background-color: {speakerColors[
+                contextMenu.word.speaker
+              ] || '#ccc'}"
+            ></span>
+            {contextMenu.word.speaker || "Unknown"}
+          </button>
+
+          {#if contextMenu.showDropdown}
+            <div class="custom-select-dropdown">
+              {#each speakers as sp}
+                <button
+                  class="custom-option"
+                  on:click={() => {
+                    contextMenu.word.speaker = sp;
+                    words = words;
+                    contextMenu.showDropdown = false;
+                    contextMenu.show = false;
+                    pushState();
+                  }}
+                >
+                  <span
+                    class="color-dot"
+                    style="background-color: {speakerColors[sp]}"
+                  ></span>
+                  {sp}
+                </button>
+              {/each}
+            </div>
+          {/if}
+        </div>
       </div>
       <div class="menu-item">
-        <strong>Time:</strong> {formatTime(contextMenu.word.start)} - {formatTime(contextMenu.word.end)}
+        <strong>Time:</strong>
+        {formatTime(contextMenu.word.start)} - {formatTime(
+          contextMenu.word.end,
+        )}
       </div>
     </div>
   {/if}
@@ -582,7 +695,9 @@
     justify-content: center;
     padding: 0.5rem;
     border-radius: 6px;
-    transition: background-color 0.2s, transform 0.1s;
+    transition:
+      background-color 0.2s,
+      transform 0.1s;
   }
 
   .icon-btn:hover {
@@ -749,7 +864,7 @@
     height: 42px;
     border-radius: 50%;
     margin-bottom: 0.5rem;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
   }
 
   .message-time {
@@ -772,17 +887,21 @@
   .word {
     cursor: text;
     border-radius: 4px;
-    transition: background-color 0.2s, color 0.2s;
+    transition:
+      background-color 0.2s,
+      color 0.2s;
     outline: none;
   }
 
   /* Subtle hover effect to keep it distraction-free but interactive */
-  .word:hover, .word.active {
+  .word:hover,
+  .word.active {
     background-color: rgba(74, 144, 226, 0.15);
     color: var(--accent-color);
   }
 
-  .loading, .error {
+  .loading,
+  .error {
     font-family: var(--font-ui);
     text-align: center;
     color: var(--ui-color);
@@ -835,5 +954,74 @@
 
   .speaker-select:focus {
     border-color: var(--ui-color);
+  }
+
+  .custom-dropdown-wrapper {
+    align-items: flex-start;
+  }
+
+  .custom-dropdown-wrapper strong {
+    margin-top: 0.35rem;
+  }
+
+  .custom-select-container {
+    position: relative;
+    flex: 1;
+  }
+
+  .custom-select-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    background: white;
+    border: 1px solid rgba(0, 0, 0, 0.2);
+    border-radius: 4px;
+    padding: 0.3rem 0.5rem;
+    font-family: inherit;
+    font-size: 0.85rem;
+    color: var(--text-color);
+    cursor: pointer;
+    text-align: left;
+  }
+
+  .custom-select-btn:focus {
+    border-color: var(--ui-color);
+    outline: none;
+  }
+
+  .custom-select-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    margin-top: 4px;
+    background: white;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 4px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    z-index: 1010;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+
+  .custom-option {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    padding: 0.4rem 0.5rem;
+    background: none;
+    border: none;
+    font-family: inherit;
+    font-size: 0.85rem;
+    color: var(--text-color);
+    cursor: pointer;
+    text-align: left;
+    transition: background-color 0.1s;
+  }
+
+  .custom-option:hover {
+    background: rgba(0, 0, 0, 0.05);
   }
 </style>
