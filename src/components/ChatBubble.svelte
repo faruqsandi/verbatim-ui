@@ -6,101 +6,225 @@
 
   let editing = (b.words && b.words.length===1 && b.words[0].text.trim()==='')
   let editText = ''
-  let selectedWordIndex = -1
-  let assignSpeaker = ''
+  
+  // Context Menu State
+  let showMenu = false;
+  let menuX = 0;
+  let menuY = 0;
+  let menuTarget = null; // 'bubble' or 'word'
+  let targetWordIndex = -1;
+
+  // Track single word editing state
+  let editMode = null; // 'bubble' or 'word'
+  let editingWordIndex = -1;
 
   $: speaker = get(state).speakers.find(s => s.id === b.speakerId)
 
-  function startEdit(){
-    editing = true
-    editText = b.words.map(w=>w.text).join(' ')
+  // Listen to window clicks to close context menu
+  function handleWindowClick() {
+    if (showMenu) showMenu = false;
   }
 
-$: if (!editing && b.words && b.words.length===1 && b.words[0].text.trim()===''){
-  editing = true
-}
+  function handleBubbleContextMenu(e) {
+    e.preventDefault();
+    showMenu = true;
+    menuX = e.clientX;
+    menuY = e.clientY;
+    menuTarget = 'bubble';
+    targetWordIndex = -1;
+  }
 
-  function saveEdit(){
-    const words = editText.split(/\s+/).filter(Boolean).map((t,i)=>({text:t, ts: b.words[i]?.ts || '00:00:00'}))
-    b.words = words
-    editing = false
+  function handleWordContextMenu(e, idx) {
+    e.preventDefault();
+    e.stopPropagation();
+    showMenu = true;
+    menuX = e.clientX;
+    menuY = e.clientY;
+    menuTarget = 'word';
+    targetWordIndex = idx;
+  }
+
+  function startEditBubble() {
+    showMenu = false;
+    editMode = 'bubble';
+    editing = true;
+    editText = b.words.map(w => `${w.ts || '00:00:00'} ${w.text}`).join('\n');
+  }
+
+  function startEditWord() {
+    showMenu = false;
+    editMode = 'word';
+    editingWordIndex = targetWordIndex;
+    editing = true;
+    const w = b.words[targetWordIndex];
+    editText = `${w.ts || '00:00:00'} ${w.text}`;
+  }
+
+  $: if (!editing && b.words && b.words.length===1 && b.words[0].text.trim()===''){
+    editMode = 'bubble';
+    editing = true;
+  }
+
+  function saveEdit() {
+    // Parse subtitles format
+    const lines = editText.split('\n').filter(l => l.trim() !== '');
+    const newWords = [];
+    
+    for (let line of lines) {
+      const match = line.trim().match(/^(\d{2}:\d{2}:\d{2})\s+(.*)$/);
+      if (match) {
+        newWords.push({ ts: match[1], text: match[2].trim() });
+      } else {
+        // Fallback if user messes up timestamp format
+        const parts = line.trim().split(/\s+/);
+        const possibleTs = parts[0];
+        const rest = parts.slice(1).join(' ');
+        if (/^\d{2}:\d{2}:\d{2}$/.test(possibleTs)) {
+           newWords.push({ ts: possibleTs, text: rest });
+        } else {
+           // Default fallback timestamp (just keep previous if available or 00:00:00)
+           newWords.push({ ts: '00:00:00', text: line.trim() });
+        }
+      }
+    }
+
+    if (editMode === 'bubble') {
+      b.words = newWords;
+      b.words.sort((a,b) => a.ts.localeCompare(b.ts));
+    } else if (editMode === 'word') {
+      b.words.splice(editingWordIndex, 1, ...newWords);
+      b.words.sort((a,b) => a.ts.localeCompare(b.ts));
+    }
+    
+    editing = false;
+    editMode = null;
+    editingWordIndex = -1;
     updateState(()=>{})
   }
 
-  function deleteBubble(){
+  function deleteBubble() {
+    showMenu = false;
     const s = get(state)
-    s.bubbles = s.bubbles.filter(x=>x.id !== b.id)
+    s.bubbles = s.bubbles.filter(x => x.id !== b.id)
     updateState(()=>{})
   }
 
-  function onWordClick(i){
-    selectedWordIndex = i
+  function deleteWord() {
+    showMenu = false;
+    b.words.splice(targetWordIndex, 1);
+    if (b.words.length === 0) {
+      deleteBubble();
+    } else {
+      updateState(()=>{});
+    }
   }
 
-  function assignSelected(){
-    if(selectedWordIndex<0) return
-    const s = get(state)
-    const speakerId = assignSpeaker || s.speakers[0].id
-    // remove word from this bubble
-    const word = b.words[selectedWordIndex]
-    b.words.splice(selectedWordIndex,1)
-    // create or append to a new bubble right after
-    const newId = 'b' + Date.now()
-    const newBubble = { id: newId, speakerId, words: [word] }
-    const idx = s.bubbles.findIndex(x=>x.id===b.id)
-    s.bubbles.splice(idx+1,0,newBubble)
-    selectedWordIndex = -1
-    updateState(()=>{})
+  function changeBubbleSpeaker(e) {
+    showMenu = false;
+    const newSp = e.target.value;
+    if (!newSp) return;
+    b.speakerId = newSp;
+    updateState(()=>{});
   }
 
-  function reassignBubble(newSp){
-    b.speakerId = newSp
-    updateState(()=>{})
+  function changeWordSpeaker(e) {
+    showMenu = false;
+    const newSp = e.target.value;
+    if (!newSp) return;
+    if (newSp === b.speakerId) return; // No change
+
+    const s = get(state);
+    const beforeWords = b.words.slice(0, targetWordIndex);
+    const word = b.words[targetWordIndex];
+    const afterWords = b.words.slice(targetWordIndex + 1);
+    
+    b.words = beforeWords;
+    
+    const idx = s.bubbles.findIndex(x => x.id === b.id);
+    let insertIndex = idx + 1;
+    
+    const newBubble = { id: 'b' + Date.now() + '_1', speakerId: newSp, words: [word] };
+    s.bubbles.splice(insertIndex, 0, newBubble);
+    insertIndex++;
+
+    if (afterWords.length > 0) {
+      const afterBubble = { id: 'b' + Date.now() + '_2', speakerId: b.speakerId, words: afterWords };
+      s.bubbles.splice(insertIndex, 0, afterBubble);
+    }
+
+    if (b.words.length === 0) {
+      s.bubbles = s.bubbles.filter(x => x.id !== b.id);
+    }
+
+    updateState(()=>{});
   }
+
 </script>
 
-<div class="bubble" style="background:{speaker?.color}22">
-  <div style="display:flex;align-items:center;gap:8px">
+<svelte:window on:click={handleWindowClick} />
+
+<div class="bubble" style="background:{speaker?.color}22" on:contextmenu={handleBubbleContextMenu}>
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
     <div class="speaker-badge" style="background:{speaker?.color}"></div>
     <strong>{speaker?.name}</strong>
-    <div class="controls" style="margin-left:auto">
-      <button class="btn secondary" on:click={startEdit}>Edit</button>
-      <button class="btn secondary" on:click={deleteBubble}>Delete</button>
-      <select on:change={(e)=>reassignBubble(e.target.value)}>
-        {#each $state.speakers as sp}
-          <option value={sp.id} selected={sp.id===b.speakerId}>{sp.name}</option>
-        {/each}
-      </select>
-    </div>
   </div>
 
   {#if editing}
-    <div style="margin-top:8px">
-      <textarea bind:value={editText} style="width:100%;height:80px"></textarea>
-      <div style="margin-top:8px">
+    <div class="editor-wrapper">
+      <textarea class="editor-textarea" bind:value={editText} placeholder="00:00:00 Word"></textarea>
+      <div class="editor-actions">
+        <button class="btn secondary" on:click={() => editing=false}>Cancel</button>
         <button class="btn" on:click={saveEdit}>Save</button>
-        <button class="btn secondary" on:click={()=>editing=false}>Cancel</button>
       </div>
     </div>
   {:else}
-    <div class="words" style="margin-top:8px">
+    <div class="words">
       {#each b.words as w, i}
-        <div class="word" on:click={()=>onWordClick(i)} style="border: {i===selectedWordIndex ? '1px solid #fff' : 'none'}">
+        <div class="word" on:contextmenu={(e) => handleWordContextMenu(e, i)}>
           <div>{w.text}</div>
           <small>{w.ts}</small>
         </div>
       {/each}
     </div>
-
-    <div style="margin-top:8px;display:flex;gap:8px;align-items:center">
-      <select bind:value={assignSpeaker}>
-        <option value=''>-- assign speaker --</option>
-        {#each $state.speakers as sp}
-          <option value={sp.id}>{sp.name}</option>
-        {/each}
-      </select>
-      <button class="btn" on:click={assignSelected}>Split selected word</button>
-      <div style="margin-left:auto">Words: {b.words.length}</div>
-    </div>
   {/if}
 </div>
+
+{#if showMenu}
+  <div class="context-menu" style="left: {menuX}px; top: {menuY}px;" on:click|stopPropagation>
+    {#if menuTarget === 'bubble'}
+      <button class="context-menu-item" on:click={startEditBubble}>
+        Edit Bubble
+      </button>
+      <div class="context-menu-item">
+        Speaker
+        <select class="context-menu-select" value={b.speakerId} on:change={changeBubbleSpeaker}>
+          <option value="" disabled>Select...</option>
+          {#each $state.speakers as sp}
+            <option value={sp.id}>{sp.name}</option>
+          {/each}
+        </select>
+      </div>
+      <div class="context-menu-divider"></div>
+      <button class="context-menu-item danger" on:click={deleteBubble}>
+        Delete Bubble
+      </button>
+    {:else if menuTarget === 'word'}
+      <button class="context-menu-item" on:click={startEditWord}>
+        Edit Word
+      </button>
+      <div class="context-menu-item">
+        Speaker
+        <select class="context-menu-select" value={b.speakerId} on:change={changeWordSpeaker}>
+          <option value="" disabled>Select...</option>
+          {#each $state.speakers as sp}
+            <option value={sp.id}>{sp.name}</option>
+          {/each}
+        </select>
+      </div>
+      <div class="context-menu-divider"></div>
+      <button class="context-menu-item danger" on:click={deleteWord}>
+        Delete Word
+      </button>
+    {/if}
+  </div>
+{/if}
