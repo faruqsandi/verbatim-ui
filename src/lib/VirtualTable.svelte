@@ -47,16 +47,22 @@
   }
 
   // Auto-scroll when activeWordIndex changes externally
-  $: if (activeWordIndex !== null && activeWordIndex !== undefined && viewport) {
-    // Check if the row is outside the current viewport
-    const rowTop = activeWordIndex * itemHeight;
-    const rowBottom = rowTop + itemHeight;
-    const isVisible = rowTop >= scrollTop && rowBottom <= (scrollTop + viewportHeight);
-    
-    if (!isVisible) {
-      // Center the row in the viewport
-      const targetScroll = Math.max(0, rowTop - (viewportHeight / 2) + (itemHeight / 2));
-      viewport.scrollTo({ top: targetScroll, behavior: 'smooth' });
+  let prevActiveWordIndex = null;
+  $: if (activeWordIndex !== prevActiveWordIndex) {
+    prevActiveWordIndex = activeWordIndex;
+    if (activeWordIndex !== null && activeWordIndex !== undefined && viewport) {
+      // Check if the row is outside the current viewport
+      const currentScroll = viewport.scrollTop;
+      const currentHeight = viewport.clientHeight;
+      const rowTop = activeWordIndex * itemHeight;
+      const rowBottom = rowTop + itemHeight;
+      const isVisible = rowTop >= currentScroll && rowBottom <= (currentScroll + currentHeight);
+      
+      if (!isVisible) {
+        // Center the row in the viewport
+        const targetScroll = Math.max(0, rowTop - (currentHeight / 2) + (itemHeight / 2));
+        viewport.scrollTo({ top: targetScroll, behavior: 'auto' });
+      }
     }
   }
 </script>

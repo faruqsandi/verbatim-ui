@@ -988,7 +988,7 @@
     flex-shrink: 0;
     border-right: 1px solid rgba(0, 0, 0, 0.05);
     margin-right: 1rem;
-    height: calc(100vh - 130px); /* Height minus toolbar and audio bar */
+    max-height: calc(100vh - 130px); /* Height minus toolbar and audio bar */
     position: sticky;
     top: 130px;
   }
@@ -1008,7 +1008,6 @@
     flex: 1;
     overflow: hidden; /* VirtualTable handles its own scroll */
     padding-right: 1rem;
-    min-height: 0;
   }
 
   /* Main reading area */
