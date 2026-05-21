@@ -1,0 +1,21 @@
+:root{
+  --bg:#0f1720;
+  --surface:#0b1220;
+  --muted:#9aa4b2;
+  --accent:#4f46e5;
+}
+body{font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial; background:var(--bg); color:#e6eef6; margin:0; padding:0}
+.app{max-width:900px;margin:24px auto;padding:16px}
+.layout{display:flex;gap:16px}
+.sidebar{width:200px}
+.chat{flex:1;background:#071224;padding:12px;border-radius:8px}
+.bubble{padding:8px 12px;border-radius:12px;margin:8px 0;display:inline-block;max-width:80%}
+.bubble .words{display:inline-flex;flex-wrap:wrap;gap:6px}
+.word{padding:4px 6px;border-radius:6px;background:rgba(255,255,255,0.04);cursor:pointer}
+.word small{display:block;color:var(--muted);font-size:11px;text-align:center;margin-top:2px}
+.controls{margin-top:8px;display:flex;gap:8px}
+.speaker-badge{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px}
+.header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.panel{background:#06121b;padding:8px;border-radius:8px}
+.btn{background:var(--accent);border:none;padding:6px 10px;border-radius:6px;color:white;cursor:pointer}
+.btn.secondary{background:#1f2937}
