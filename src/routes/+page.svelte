@@ -1,5 +1,5 @@
 <script>
-  import { onMount, tick } from "svelte";
+  import { onMount, onDestroy, tick } from "svelte";
   import Papa from "papaparse";
   import {
     ZoomIn,
@@ -25,11 +25,31 @@
   let fileInput;
   let audioInput;
 
-  let audioUrl = "/artikulasi.mp3";
-  let audioElement;
+  // Web Audio API state
+  let audioCtx = null;
+  let audioBuffer = null;
+  let sourceNode = null;
+  let gainNode = null;
+  let audioLoaded = false;
   let audioDuration = 0;
   let audioCurrentTime = 0;
   let audioPaused = true;
+  let _startOffset = 0;  // playback offset when last started/seeked
+  let _startCtxTime = 0; // audioCtx.currentTime when playback started
+  let _animFrameId = null;
+
+  function _ensureAudioCtx() {
+    if (!audioCtx) {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    return audioCtx;
+  }
+
+  onDestroy(() => {
+    _stopSource();
+    if (_animFrameId) cancelAnimationFrame(_animFrameId);
+    if (audioCtx) { try { audioCtx.close(); } catch(e) {} }
+  });
 
   let history = [];
   let currentHistoryIndex = -1;
@@ -125,33 +145,130 @@
   function handleAudioUpload(event) {
     const file = event.target.files[0];
     if (!file) return;
-    if (audioUrl && audioUrl.startsWith("blob:")) {
-      URL.revokeObjectURL(audioUrl);
-    }
-    audioUrl = URL.createObjectURL(file);
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      await _decodeAudioData(e.target.result);
+    };
+    reader.readAsArrayBuffer(file);
   }
 
-  async function checkAudioFileExists(url) {
+  async function _decodeAudioData(arrayBuffer) {
     try {
-      const res = await fetch(url, { method: "HEAD" });
-      return res.ok;
-    } catch {
-      return false;
+      const ctx = _ensureAudioCtx();
+      // decodeAudioData consumes the buffer, so copy it
+      const copy = arrayBuffer.slice(0);
+      audioBuffer = await ctx.decodeAudioData(copy);
+      audioDuration = audioBuffer.duration;
+      _startOffset = 0;
+      audioCurrentTime = 0;
+      audioLoaded = true;
+      audioPaused = true;
+    } catch (err) {
+      console.error("Error decoding audio:", err);
+      audioLoaded = false;
     }
+  }
+
+  async function loadAudioFromUrl(url) {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("Failed to fetch audio: " + res.status);
+      const arrayBuffer = await res.arrayBuffer();
+      await _decodeAudioData(arrayBuffer);
+    } catch (err) {
+      console.error("Error loading audio:", err);
+      audioLoaded = false;
+    }
+  }
+
+  function _stopSource() {
+    if (sourceNode) {
+      try { sourceNode.onended = null; sourceNode.stop(); } catch(e) {}
+      try { sourceNode.disconnect(); } catch(e) {}
+      sourceNode = null;
+    }
+  }
+
+  function _updateTime() {
+    if (!audioPaused && audioCtx) {
+      audioCurrentTime = _startOffset + (audioCtx.currentTime - _startCtxTime);
+      if (audioCurrentTime >= audioDuration) {
+        // Reached the end
+        _stopSource();
+        audioPaused = true;
+        _startOffset = 0;
+        audioCurrentTime = 0;
+        return;
+      }
+      _animFrameId = requestAnimationFrame(_updateTime);
+    }
+  }
+
+  function _playFrom(offset) {
+    if (!audioBuffer) return;
+    const ctx = _ensureAudioCtx();
+    if (ctx.state === 'suspended') ctx.resume();
+
+    _stopSource();
+
+    sourceNode = ctx.createBufferSource();
+    sourceNode.buffer = audioBuffer;
+    if (!gainNode) {
+      gainNode = ctx.createGain();
+      gainNode.connect(ctx.destination);
+    }
+    sourceNode.connect(gainNode);
+
+    _startOffset = Math.max(0, Math.min(offset, audioDuration));
+    _startCtxTime = ctx.currentTime;
+    sourceNode.start(0, _startOffset);
+    audioPaused = false;
+
+    sourceNode.onended = () => {
+      if (!audioPaused) {
+        audioPaused = true;
+        _startOffset = 0;
+        audioCurrentTime = 0;
+        if (_animFrameId) cancelAnimationFrame(_animFrameId);
+      }
+    };
+
+    if (_animFrameId) cancelAnimationFrame(_animFrameId);
+    _animFrameId = requestAnimationFrame(_updateTime);
   }
 
   function togglePlay() {
-    if (audioElement) {
-      if (audioPaused) audioElement.play();
-      else audioElement.pause();
+    if (!audioBuffer) return;
+    if (audioPaused) {
+      _playFrom(_startOffset);
+    } else {
+      // Pause: save current position
+      _startOffset = _startOffset + (audioCtx.currentTime - _startCtxTime);
+      audioCurrentTime = _startOffset;
+      _stopSource();
+      audioPaused = true;
+      if (_animFrameId) cancelAnimationFrame(_animFrameId);
     }
   }
 
   function stopAudio() {
-    if (audioElement) {
-      audioElement.pause();
-      audioElement.currentTime = 0;
+    _stopSource();
+    audioPaused = true;
+    _startOffset = 0;
+    audioCurrentTime = 0;
+    if (_animFrameId) cancelAnimationFrame(_animFrameId);
+  }
+
+  function seekAudioTo(time) {
+    _startOffset = Math.max(0, Math.min(time, audioDuration));
+    audioCurrentTime = _startOffset;
+    if (!audioPaused) {
+      _playFrom(_startOffset);
     }
+  }
+
+  function handleSeek(e) {
+    seekAudioTo(parseFloat(e.target.value));
   }
 
   function handleFileUpload(event) {
@@ -185,13 +302,7 @@
         // Try to load mp3 with same name
         const expectedAudio = file.name.replace(/\.csv$/i, ".mp3");
         const audioUrlCandidate = "/" + expectedAudio;
-        checkAudioFileExists(audioUrlCandidate).then((exists) => {
-          if (exists) {
-            audioUrl = audioUrlCandidate;
-          } else {
-            audioUrl = null;
-          }
-        });
+        loadAudioFromUrl(audioUrlCandidate);
 
         isLoading = false;
       },
@@ -223,7 +334,7 @@
       saveCsv();
     }
 
-    if ((e.code === "Space" || e.key === " ") && audioUrl) {
+    if ((e.code === "Space" || e.key === " ") && audioLoaded) {
       const isEditing =
         document.activeElement &&
         (document.activeElement.hasAttribute("contenteditable") ||
@@ -255,8 +366,11 @@
       : [];
 
   onMount(async () => {
+    // Load demo audio
+    loadAudioFromUrl("/artikulasi.mp3");
+
     try {
-      const response = await fetch("/result.csv");
+      const response = await fetch("/artikulasi.csv");
       const csvStr = await response.text();
       Papa.parse(csvStr, {
         header: true,
@@ -293,7 +407,7 @@
   });
 
   $: {
-    if (audioUrl && words.length > 0) {
+    if (audioLoaded && words.length > 0) {
       let foundIndex = null;
       for (let i = 0; i < words.length; i++) {
         const w = words[i];
@@ -519,17 +633,7 @@
   on:change={handleAudioUpload}
 />
 
-{#if audioUrl}
-  <!-- svelte-ignore a11y-media-has-caption -->
-  <audio
-    src={audioUrl}
-    bind:this={audioElement}
-    bind:currentTime={audioCurrentTime}
-    bind:duration={audioDuration}
-    bind:paused={audioPaused}
-    on:error={() => (audioUrl = null)}
-  ></audio>
-{/if}
+<!-- No <audio> element needed - using Web Audio API -->
 
 <svelte:head>
   {@html `<style>
@@ -609,7 +713,7 @@
     </div>
   </header>
 
-  {#if audioUrl}
+  {#if audioLoaded}
     <!-- Sticky Audio Bar -->
     <div class="audio-bar">
       <div class="audio-controls">
@@ -637,7 +741,8 @@
           min="0"
           max={audioDuration || 0}
           step="0.01"
-          bind:value={audioCurrentTime}
+          value={audioCurrentTime}
+          on:input={handleSeek}
         />
         <span class="audio-time">{formatTime(audioDuration)}</span>
       </div>
@@ -712,18 +817,18 @@
                       on:focus={() => {
                         activeWordIndex = item.index;
                         if (words[item.index] && words[item.index].start) {
-                          audioCurrentTime = parseFloat(
+                          seekAudioTo(parseFloat(
                             words[item.index].start,
-                          );
+                          ));
                         }
                       }}
                       on:blur={() => pushState()}
                       on:click={() => {
                         activeWordIndex = item.index;
                         if (words[item.index] && words[item.index].start) {
-                          audioCurrentTime = parseFloat(
+                          seekAudioTo(parseFloat(
                             words[item.index].start,
-                          );
+                          ));
                         }
                       }}
                       on:keydown={(e) => handleKeydown(e, item.index)}
