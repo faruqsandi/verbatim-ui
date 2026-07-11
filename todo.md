@@ -26,16 +26,16 @@ This TODO list outlines actionable tasks to address the architectural issues, te
   - [x] Replace brittle `document.getElementById` and manual selection offsets with Svelte-managed binding refs or index trackers.
 
 ## 🖥️ 3. Native Desktop (Tauri) Integrations
-- [ ] **Integrate Native Dialogs**:
-  - [ ] Add `@tauri-apps/plugin-dialog` to project dependencies.
-  - [ ] Replace browser HTML file uploads with native Open dialog for audio and CSV files.
-  - [ ] Replace mock browser click download with native Save dialog.
-- [ ] **Integrate File System Access**:
-  - [ ] Add `@tauri-apps/plugin-fs` to write exported files directly to the user-chosen filesystem path.
-- [ ] **Activate Tauri backend commands**:
-  - [ ] Wire up frontend file loading/saving to call Rust endpoints or invoke native read operations.
-- [ ] **Drag and Drop**:
-  - [ ] Enable dragging audio and CSV files directly onto the app window to load them.
+- [x] **Integrate Native Dialogs**:
+  - [x] Add `@tauri-apps/plugin-dialog` to project dependencies.
+  - [x] Replace browser HTML file uploads with native Open dialog for audio and CSV files.
+  - [x] Replace mock browser click download with native Save dialog.
+- [x] **Integrate File System Access**:
+  - [x] Add `@tauri-apps/plugin-fs` to write exported files directly to the user-chosen filesystem path.
+- [x] **Activate Tauri backend commands**:
+  - [x] Wire up frontend file loading/saving to call Rust endpoints or invoke native read operations.
+- [x] **Drag and Drop**:
+  - [x] Enable dragging audio and CSV files directly onto the app window to load them.
 
 ## 🎨 4. Functional & UI Features
 - [ ] **Audio Waveform Visualization**:

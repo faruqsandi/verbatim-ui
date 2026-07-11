@@ -45,6 +45,24 @@
     }
   }
 
+  function handleLoadCsvClick() {
+    const isTauri = typeof window !== "undefined" && /** @type {any} */ (window).__TAURI_INTERNALS__;
+    if (isTauri) {
+      transcriptState.selectAndLoadCsv();
+    } else {
+      triggerFileInput();
+    }
+  }
+
+  function handleLoadAudioClick() {
+    const isTauri = typeof window !== "undefined" && /** @type {any} */ (window).__TAURI_INTERNALS__;
+    if (isTauri) {
+      transcriptState.selectAndLoadAudio();
+    } else {
+      triggerAudioInput();
+    }
+  }
+
   function increaseFontSize() {
     if (transcriptState.fontScale < 2.5) transcriptState.fontScale += 0.1;
   }
@@ -82,10 +100,10 @@
       Data Table
     </label>
     <div class="divider"></div>
-    <button onclick={triggerFileInput} title="Load CSV" class="icon-btn">
+    <button onclick={handleLoadCsvClick} title="Load CSV" class="icon-btn">
       <Upload size={20} />
     </button>
-    <button onclick={triggerAudioInput} title="Load Audio" class="icon-btn">
+    <button onclick={handleLoadAudioClick} title="Load Audio" class="icon-btn">
       <Music size={20} />
     </button>
     <button onclick={() => transcriptState.saveCsv()} title="Save CSV (Ctrl+S)" class="icon-btn">

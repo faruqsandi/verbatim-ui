@@ -1,5 +1,6 @@
 <script>
   import { onMount, onDestroy, setContext } from "svelte";
+  import { getCurrentWindow } from "@tauri-apps/api/window";
   import { TranscriptState } from "$lib/state/transcript.svelte.js";
   import Toolbar from "$lib/components/Toolbar.svelte";
   import AudioPlayer from "$lib/components/AudioPlayer.svelte";
@@ -13,12 +14,40 @@
   // Set the state in context so children can access it
   setContext("TRANSCRIPT_STATE", transcriptState);
 
-  onMount(() => {
+  /** @type {any} */
+  let unlistenFileDrop;
+
+  onMount(async () => {
     transcriptState.initDemo();
+
+    const isTauri = typeof window !== "undefined" && /** @type {any} */ (window).__TAURI_INTERNALS__;
+    if (isTauri) {
+      try {
+        const appWindow = /** @type {any} */ (getCurrentWindow());
+        unlistenFileDrop = await appWindow.onFileDropEvent((/** @type {any} */ event) => {
+          if (event.payload.type === "drop") {
+            const paths = event.payload.paths;
+            if (paths && paths.length > 0) {
+              const firstPath = paths[0];
+              if (firstPath.endsWith(".csv")) {
+                transcriptState.loadCsvFromNativePath(firstPath);
+              } else if (/\.(mp3|wav|ogg|m4a|flac)$/i.test(firstPath)) {
+                transcriptState.loadAudioFromNativePath(firstPath);
+              }
+            }
+          }
+        });
+      } catch (err) {
+        console.error("Failed to setup file drop listener:", err);
+      }
+    }
   });
 
   onDestroy(() => {
     transcriptState.destroy();
+    if (unlistenFileDrop) {
+      unlistenFileDrop();
+    }
   });
 
   function handleGlobalClick() {

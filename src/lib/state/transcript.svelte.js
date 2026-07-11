@@ -55,6 +55,10 @@ export class TranscriptState {
   /** @type {Record<number, HTMLElement>} */
   wordElements = {};
 
+  // File Path State for Tauri Desktop native saving
+  /** @type {string | null} */
+  currentFilePath = null;
+
   // History lists
   /** @type {any[]} */
   history = [];
@@ -119,6 +123,7 @@ export class TranscriptState {
   async initDemo() {
     this.isLoading = true;
     this.errorMsg = "";
+    this.currentFilePath = null;
     
     // Load default audio
     this.loadAudioFromUrl("/artikulasi.mp3");
@@ -167,6 +172,7 @@ export class TranscriptState {
   loadCsv(file) {
     this.isLoading = true;
     this.errorMsg = "";
+    this.currentFilePath = null;
 
     Papa.parse(file, {
       header: true,
@@ -196,8 +202,73 @@ export class TranscriptState {
     });
   }
 
-  // Save/Export CSV file
-  saveCsv() {
+  // Native Open/Read CSV (Tauri Desktop mode)
+  async selectAndLoadCsv() {
+    try {
+      const { open } = await import("@tauri-apps/plugin-dialog");
+      const path = await open({
+        filters: [{ name: "CSV Data", extensions: ["csv"] }],
+        multiple: false,
+      });
+
+      if (path && typeof path === "string") {
+        await this.loadCsvFromNativePath(path);
+      }
+    } catch (err) {
+      console.error("Tauri open CSV error:", err);
+    }
+  }
+
+  /**
+   * @param {string} path
+   */
+  async loadCsvFromNativePath(path) {
+    try {
+      const { readTextFile } = await import("@tauri-apps/plugin-fs");
+      this.isLoading = true;
+      this.errorMsg = "";
+      this.currentFilePath = path;
+
+      const csvStr = await readTextFile(path);
+      Papa.parse(csvStr, {
+        header: true,
+        skipEmptyLines: true,
+        complete: (/** @type {any} */ results) => {
+          this.words = results.data.map((/** @type {any} */ w) => ({
+            ...w,
+            id: Math.random().toString(36).substring(2, 10),
+          }));
+
+          this.assignSpeakerColors();
+          this.history = [];
+          this.currentHistoryIndex = -1;
+          this.pushState();
+
+          this.autoLoadAudioForCsv(path);
+          this.isLoading = false;
+        },
+        error: (/** @type {any} */ err) => {
+          this.errorMsg = err.message;
+          this.isLoading = false;
+        },
+      });
+    } catch (err) {
+      console.error("Tauri load CSV error:", err);
+      this.errorMsg = err instanceof Error ? err.message : String(err);
+      this.isLoading = false;
+    }
+  }
+
+  /**
+   * @param {string} csvPath
+   */
+  autoLoadAudioForCsv(csvPath) {
+    const audioPathCandidate = csvPath.replace(/\.csv$/i, ".mp3");
+    this.loadAudioFromNativePath(audioPathCandidate);
+  }
+
+  // Native Save CSV (Tauri Desktop mode)
+  async saveCsv() {
     const csvStr = Papa.unparse(
       this.words.map((w) => {
         // Remove internal properties
@@ -205,6 +276,48 @@ export class TranscriptState {
         return rest;
       }),
     );
+
+    const isTauri = typeof window !== "undefined" && /** @type {any} */ (window).__TAURI_INTERNALS__;
+    if (isTauri && this.currentFilePath) {
+      try {
+        const { writeTextFile } = await import("@tauri-apps/plugin-fs");
+        await writeTextFile(this.currentFilePath, csvStr);
+        return; // File overwritten successfully
+      } catch (err) {
+        console.error("Failed to write native file directly:", err);
+      }
+    }
+
+    // Trigger Save As
+    await this.saveCsvAs(csvStr);
+  }
+
+  /**
+   * @param {string} csvStr
+   */
+  async saveCsvAs(csvStr) {
+    const isTauri = typeof window !== "undefined" && /** @type {any} */ (window).__TAURI_INTERNALS__;
+    if (isTauri) {
+      try {
+        const { save } = await import("@tauri-apps/plugin-dialog");
+        const { writeTextFile } = await import("@tauri-apps/plugin-fs");
+        
+        const path = await save({
+          filters: [{ name: "CSV Data", extensions: ["csv"] }],
+          defaultPath: this.currentFilePath || "transcript_edited.csv",
+        });
+
+        if (path) {
+          await writeTextFile(path, csvStr);
+          this.currentFilePath = path;
+        }
+        return;
+      } catch (err) {
+        console.error("Tauri save dialog error:", err);
+      }
+    }
+
+    // Web browser fallback
     const blob = new Blob([csvStr], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -214,6 +327,38 @@ export class TranscriptState {
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
+  }
+
+  // Native Open Audio (Tauri Desktop mode)
+  async selectAndLoadAudio() {
+    try {
+      const { open } = await import("@tauri-apps/plugin-dialog");
+      const path = await open({
+        filters: [{ name: "Audio Files", extensions: ["mp3", "wav", "ogg", "m4a", "flac"] }],
+        multiple: false,
+      });
+
+      if (path && typeof path === "string") {
+        await this.loadAudioFromNativePath(path);
+      }
+    } catch (err) {
+      console.error("Tauri open audio error:", err);
+    }
+  }
+
+  /**
+   * @param {string} nativePath
+   */
+  async loadAudioFromNativePath(nativePath) {
+    try {
+      const { convertFileSrc } = await import("@tauri-apps/api/core");
+      const audioUrl = convertFileSrc(nativePath);
+      this.audioLoaded = false;
+      this.audio.src = audioUrl;
+      this.audio.load();
+    } catch (err) {
+      console.error("Tauri convert file src error:", err);
+    }
   }
 
   /**
