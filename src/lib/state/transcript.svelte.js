@@ -45,19 +45,15 @@ export class TranscriptState {
     showDropdown: false,
   });
 
-  // Non-reactive audio buffers and nodes
-  /** @type {AudioContext | null} */
-  audioCtx = null;
-  /** @type {AudioBuffer | null} */
-  audioBuffer = null;
-  /** @type {AudioBufferSourceNode | null} */
-  sourceNode = null;
-  /** @type {GainNode | null} */
-  gainNode = null;
-  _startOffset = 0;
-  _startCtxTime = 0;
+  // HTML5 Audio Element
+  /** @type {HTMLAudioElement} */
+  audio;
   /** @type {number | null} */
   _animFrameId = null;
+
+  // Svelte-native reference map for word spans
+  /** @type {Record<number, HTMLElement>} */
+  wordElements = {};
 
   // History lists
   /** @type {any[]} */
@@ -88,9 +84,35 @@ export class TranscriptState {
   }
 
   constructor() {
-    this._ensureAudioCtx = this._ensureAudioCtx.bind(this);
-    this._decodeAudioData = this._decodeAudioData.bind(this);
     this._updateTime = this._updateTime.bind(this);
+    
+    // Initialize HTML5 Audio
+    this.audio = new Audio();
+    
+    this.audio.onplay = () => {
+      this.audioPaused = false;
+      this._startTimeSync();
+    };
+    
+    this.audio.onpause = () => {
+      this.audioPaused = true;
+      this._stopTimeSync();
+    };
+    
+    this.audio.onended = () => {
+      this.audioPaused = true;
+      this.audioCurrentTime = 0;
+      this._stopTimeSync();
+    };
+    
+    this.audio.onloadedmetadata = () => {
+      this.audioDuration = this.audio.duration;
+      this.audioLoaded = true;
+    };
+
+    this.audio.onseeked = () => {
+      this.audioCurrentTime = this.audio.currentTime;
+    };
   }
 
   // Initialize and load default demo data
@@ -194,139 +216,61 @@ export class TranscriptState {
     URL.revokeObjectURL(url);
   }
 
-  // Web Audio Context & Core Helpers
-  _ensureAudioCtx() {
-    if (!this.audioCtx) {
-      const AudioContextClass = window.AudioContext || /** @type {any} */ (window).webkitAudioContext;
-      this.audioCtx = new AudioContextClass();
-    }
-    return this.audioCtx;
-  }
-
-  /**
-   * @param {ArrayBuffer} arrayBuffer
-   */
-  async _decodeAudioData(arrayBuffer) {
-    try {
-      const ctx = this._ensureAudioCtx();
-      const copy = arrayBuffer.slice(0);
-      this.audioBuffer = await ctx.decodeAudioData(copy);
-      this.audioDuration = this.audioBuffer.duration;
-      this._startOffset = 0;
-      this.audioCurrentTime = 0;
-      this.audioLoaded = true;
-      this.audioPaused = true;
-    } catch (err) {
-      console.error("Error decoding audio:", err);
-      this.audioLoaded = false;
-    }
-  }
-
   /**
    * @param {string} url
    */
-  async loadAudioFromUrl(url) {
-    try {
-      const res = await fetch(url);
-      if (!res.ok) throw new Error("Failed to fetch audio: " + res.status);
-      const arrayBuffer = await res.arrayBuffer();
-      await this._decodeAudioData(arrayBuffer);
-    } catch (err) {
-      console.error("Error loading audio:", err);
-      this.audioLoaded = false;
-    }
+  loadAudioFromUrl(url) {
+    this.audioLoaded = false;
+    this.audio.src = url;
+    this.audio.load();
   }
 
-  _stopSource() {
-    if (this.sourceNode) {
-      try { this.sourceNode.onended = null; this.sourceNode.stop(); } catch(e) {}
-      try { this.sourceNode.disconnect(); } catch(e) {}
-      this.sourceNode = null;
+  _startTimeSync() {
+    const sync = () => {
+      if (!this.audioPaused) {
+        this.audioCurrentTime = this.audio.currentTime;
+        this._animFrameId = requestAnimationFrame(sync);
+      }
+    };
+    if (this._animFrameId) cancelAnimationFrame(this._animFrameId);
+    this._animFrameId = requestAnimationFrame(sync);
+  }
+
+  _stopTimeSync() {
+    if (this._animFrameId) {
+      cancelAnimationFrame(this._animFrameId);
+      this._animFrameId = null;
     }
   }
 
   _updateTime() {
-    if (!this.audioPaused && this.audioCtx) {
-      this.audioCurrentTime = this._startOffset + (this.audioCtx.currentTime - this._startCtxTime);
-      if (this.audioCurrentTime >= this.audioDuration) {
-        this._stopSource();
-        this.audioPaused = true;
-        this._startOffset = 0;
-        this.audioCurrentTime = 0;
-        return;
-      }
-      this._animFrameId = requestAnimationFrame(this._updateTime);
-    }
-  }
-
-  /**
-   * @param {number} offset
-   */
-  _playFrom(offset) {
-    if (!this.audioBuffer) return;
-    const ctx = this._ensureAudioCtx();
-    if (ctx.state === "suspended") ctx.resume();
-
-    this._stopSource();
-
-    this.sourceNode = ctx.createBufferSource();
-    this.sourceNode.buffer = this.audioBuffer;
-    if (!this.gainNode) {
-      this.gainNode = ctx.createGain();
-      this.gainNode.connect(ctx.destination);
-    }
-    this.sourceNode.connect(this.gainNode);
-
-    this._startOffset = Math.max(0, Math.min(offset, this.audioDuration));
-    this._startCtxTime = ctx.currentTime;
-    this.sourceNode.start(0, this._startOffset);
-    this.audioPaused = false;
-
-    this.sourceNode.onended = () => {
-      if (!this.audioPaused) {
-        this.audioPaused = true;
-        this._startOffset = 0;
-        this.audioCurrentTime = 0;
-        if (this._animFrameId) cancelAnimationFrame(this._animFrameId);
-      }
-    };
-
-    if (this._animFrameId) cancelAnimationFrame(this._animFrameId);
-    this._animFrameId = requestAnimationFrame(this._updateTime);
+    this.audioCurrentTime = this.audio.currentTime;
   }
 
   togglePlay() {
-    if (!this.audioBuffer) return;
-    if (this.audioPaused) {
-      this._playFrom(this._startOffset);
+    if (!this.audioLoaded) return;
+    if (this.audio.paused) {
+      this.audio.play().catch((err) => console.error("Playback error:", err));
     } else {
-      if (this.audioCtx) {
-        this._startOffset = this._startOffset + (this.audioCtx.currentTime - this._startCtxTime);
-      }
-      this.audioCurrentTime = this._startOffset;
-      this._stopSource();
-      this.audioPaused = true;
-      if (this._animFrameId) cancelAnimationFrame(this._animFrameId);
+      this.audio.pause();
     }
   }
 
   stopAudio() {
-    this._stopSource();
-    this.audioPaused = true;
-    this._startOffset = 0;
+    if (!this.audioLoaded) return;
+    this.audio.pause();
+    this.audio.currentTime = 0;
     this.audioCurrentTime = 0;
-    if (this._animFrameId) cancelAnimationFrame(this._animFrameId);
+    this._stopTimeSync();
   }
 
   /**
    * @param {number} time
    */
   seekAudioTo(time) {
-    this._startOffset = Math.max(0, Math.min(time, this.audioDuration));
-    this.audioCurrentTime = this._startOffset;
-    if (!this.audioPaused) {
-      this._playFrom(this._startOffset);
-    }
+    if (!this.audioLoaded) return;
+    this.audio.currentTime = Math.max(0, Math.min(time, this.audioDuration));
+    this.audioCurrentTime = this.audio.currentTime;
   }
 
   /**
@@ -334,28 +278,27 @@ export class TranscriptState {
    */
   handleAudioUpload(file) {
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      if (e.target && e.target.result instanceof ArrayBuffer) {
-        await this._decodeAudioData(e.target.result);
-      }
-    };
-    reader.readAsArrayBuffer(file);
+    this.audioLoaded = false;
+    const url = URL.createObjectURL(file);
+    this.audio.src = url;
+    this.audio.load();
   }
 
-  // History & Undo / Redo
+  // Optimized History snapshot using fast shallow object copying
   pushState() {
-    const newStr = JSON.stringify(this.words);
+    const snapshot = this.words.map((w) => ({ ...w }));
     if (this.currentHistoryIndex >= 0 && this.currentHistoryIndex < this.history.length) {
-      const currentStateStr = JSON.stringify(this.history[this.currentHistoryIndex]);
-      if (currentStateStr === newStr) return; // no change
+      const lastState = this.history[this.currentHistoryIndex];
+      if (this._isEqual(lastState, snapshot)) {
+        return; // No actual changes, skip pushing
+      }
     }
 
     if (this.currentHistoryIndex < this.history.length - 1) {
       this.history = this.history.slice(0, this.currentHistoryIndex + 1);
     }
 
-    this.history.push(JSON.parse(newStr));
+    this.history.push(snapshot);
 
     if (this.history.length > this.MAX_HISTORY) {
       this.history.shift();
@@ -364,17 +307,36 @@ export class TranscriptState {
     }
   }
 
+  /**
+   * @param {any[]} a
+   * @param {any[]} b
+   */
+  _isEqual(a, b) {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+      if (
+        a[i].word !== b[i].word ||
+        a[i].speaker !== b[i].speaker ||
+        a[i].start !== b[i].start ||
+        a[i].end !== b[i].end
+      ) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   undo() {
     if (this.currentHistoryIndex > 0) {
       this.currentHistoryIndex--;
-      this.words = JSON.parse(JSON.stringify(this.history[this.currentHistoryIndex]));
+      this.words = this.history[this.currentHistoryIndex].map((/** @type {any} */ w) => ({ ...w }));
     }
   }
 
   redo() {
     if (this.currentHistoryIndex < this.history.length - 1) {
       this.currentHistoryIndex++;
-      this.words = JSON.parse(JSON.stringify(this.history[this.currentHistoryIndex]));
+      this.words = this.history[this.currentHistoryIndex].map((/** @type {any} */ w) => ({ ...w }));
     }
   }
 
@@ -406,10 +368,8 @@ export class TranscriptState {
 
   // Clean up
   destroy() {
-    this._stopSource();
-    if (this._animFrameId) cancelAnimationFrame(this._animFrameId);
-    if (this.audioCtx) {
-      try { this.audioCtx.close(); } catch(e) {}
-    }
+    this.audio.pause();
+    this.audio.src = "";
+    this._stopTimeSync();
   }
 }

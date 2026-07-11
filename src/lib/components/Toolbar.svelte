@@ -10,7 +10,7 @@
     Music,
   } from "@lucide/svelte";
 
-  const state = getContext("TRANSCRIPT_STATE");
+  const transcriptState = getContext("TRANSCRIPT_STATE");
 
   /** @type {HTMLInputElement} */
   let fileInput;
@@ -31,7 +31,7 @@
   function handleFileUpload(event) {
     const file = event.target.files[0];
     if (file) {
-      state.loadCsv(file);
+      transcriptState.loadCsv(file);
     }
   }
 
@@ -41,16 +41,16 @@
   function handleAudioUpload(event) {
     const file = event.target.files[0];
     if (file) {
-      state.handleAudioUpload(file);
+      transcriptState.handleAudioUpload(file);
     }
   }
 
   function increaseFontSize() {
-    if (state.fontScale < 2.5) state.fontScale += 0.1;
+    if (transcriptState.fontScale < 2.5) transcriptState.fontScale += 0.1;
   }
 
   function decreaseFontSize() {
-    if (state.fontScale > 0.6) state.fontScale -= 0.1;
+    if (transcriptState.fontScale > 0.6) transcriptState.fontScale -= 0.1;
   }
 </script>
 
@@ -73,12 +73,12 @@
   <div class="toolbar-title">Reader</div>
   <div class="font-controls">
     <label class="toggle-label">
-      <input type="checkbox" bind:checked={state.showUnderlines} />
+      <input type="checkbox" bind:checked={transcriptState.showUnderlines} />
       Underlines
     </label>
     <div class="divider"></div>
     <label class="toggle-label">
-      <input type="checkbox" bind:checked={state.showTablePanel} />
+      <input type="checkbox" bind:checked={transcriptState.showTablePanel} />
       Data Table
     </label>
     <div class="divider"></div>
@@ -88,24 +88,24 @@
     <button onclick={triggerAudioInput} title="Load Audio" class="icon-btn">
       <Music size={20} />
     </button>
-    <button onclick={() => state.saveCsv()} title="Save CSV (Ctrl+S)" class="icon-btn">
+    <button onclick={() => transcriptState.saveCsv()} title="Save CSV (Ctrl+S)" class="icon-btn">
       <Save size={20} />
     </button>
     <button
-      onclick={() => state.undo()}
-      disabled={state.currentHistoryIndex <= 0}
+      onclick={() => transcriptState.undo()}
+      disabled={transcriptState.currentHistoryIndex <= 0}
       title="Undo (Ctrl+Z)"
       class="icon-btn"
-      class:disabled={state.currentHistoryIndex <= 0}
+      class:disabled={transcriptState.currentHistoryIndex <= 0}
     >
       <Undo size={20} />
     </button>
     <button
-      onclick={() => state.redo()}
-      disabled={state.currentHistoryIndex >= state.history.length - 1}
+      onclick={() => transcriptState.redo()}
+      disabled={transcriptState.currentHistoryIndex >= transcriptState.history.length - 1}
       title="Redo (Ctrl+Shift+Z)"
       class="icon-btn"
-      class:disabled={state.currentHistoryIndex >= state.history.length - 1}
+      class:disabled={transcriptState.currentHistoryIndex >= transcriptState.history.length - 1}
     >
       <Redo size={20} />
     </button>
@@ -117,7 +117,7 @@
     >
       <ZoomOut size={20} />
     </button>
-    <div class="scale-indicator">{Math.round(state.fontScale * 100)}%</div>
+    <div class="scale-indicator">{Math.round(transcriptState.fontScale * 100)}%</div>
     <button
       onclick={increaseFontSize}
       title="Increase Font Size"

@@ -2,7 +2,7 @@
   import { getContext, tick } from "svelte";
   import WordBubble from "./WordBubble.svelte";
 
-  const state = getContext("TRANSCRIPT_STATE");
+  const transcriptState = getContext("TRANSCRIPT_STATE");
 
   /**
    * @param {any} seconds
@@ -17,11 +17,11 @@
 
   // Svelte 5: $effect monitors state changes reactively
   $effect(() => {
-    const time = state.audioCurrentTime;
-    if (state.audioLoaded && state.words.length > 0) {
+    const time = transcriptState.audioCurrentTime;
+    if (transcriptState.audioLoaded && transcriptState.words.length > 0) {
       let foundIndex = null;
-      for (let i = 0; i < state.words.length; i++) {
-        const w = state.words[i];
+      for (let i = 0; i < transcriptState.words.length; i++) {
+        const w = transcriptState.words[i];
         if (
           time >= parseFloat(w.start) &&
           time <= parseFloat(w.end)
@@ -31,11 +31,11 @@
         }
       }
 
-      if (foundIndex !== state.activeWordIndex) {
-        state.activeWordIndex = foundIndex;
+      if (foundIndex !== transcriptState.activeWordIndex) {
+        transcriptState.activeWordIndex = foundIndex;
         if (foundIndex !== null) {
           tick().then(() => {
-            const wordEl = document.getElementById(`word-${foundIndex}`);
+            const wordEl = transcriptState.wordElements[foundIndex];
             if (wordEl) {
               const rect = wordEl.getBoundingClientRect();
               // Scroll if the element is out of viewport scroll boundaries
@@ -55,12 +55,12 @@
 
 <svelte:head>
   {@html `<style>
-    ${state.speakers
+    ${transcriptState.speakers
       .map(
         (sp, idx) => `
       .speaker-sp-${idx} {
-        text-decoration: ${state.showUnderlines ? "underline" : "none"};
-        text-decoration-color: ${state.speakerColors[sp] || "transparent"};
+        text-decoration: ${transcriptState.showUnderlines ? "underline" : "none"};
+        text-decoration-color: ${transcriptState.speakerColors[sp] || "transparent"};
         text-decoration-thickness: 1.5px;
         text-underline-offset: 4px;
       }
@@ -71,18 +71,18 @@
 </svelte:head>
 
 <main class="reading-area">
-  {#if state.isLoading}
+  {#if transcriptState.isLoading}
     <div class="loading">Loading content...</div>
-  {:else if state.errorMsg}
-    <div class="error">{state.errorMsg}</div>
+  {:else if transcriptState.errorMsg}
+    <div class="error">{transcriptState.errorMsg}</div>
   {:else}
     <div class="chat-container">
-      {#each state.sentenceGroups as group (group.id)}
+      {#each transcriptState.sentenceGroups as group (group.id)}
         <div class="chat-message">
           <div class="message-meta">
             <div
               class="speaker-avatar"
-              style="background-color: {state.speakerColors[group.speaker] || '#ccc'}"
+              style="background-color: {transcriptState.speakerColors[group.speaker] || '#ccc'}"
               title={group.speaker || "Unknown"}
             ></div>
             <div class="message-time">
@@ -100,7 +100,7 @@
           <div class="message-content paragraph">
             <span
               class="sentence {group.speaker
-                ? `speaker-sp-${state.speakers.indexOf(group.speaker)}`
+                ? `speaker-sp-${transcriptState.speakers.indexOf(group.speaker)}`
                 : ''}"
             >
               {#each group.words as item, wIdx (item.word.id)}

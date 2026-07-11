@@ -4,7 +4,18 @@
   // Svelte 5 syntax: props are passed via destructuring of $props()
   let { wordData, index } = $props();
 
-  const state = getContext("TRANSCRIPT_STATE");
+  const transcriptState = getContext("TRANSCRIPT_STATE");
+
+  /** @type {HTMLElement | undefined} */
+  let element = $state();
+
+  // Register this word span's DOM node in the state reference map
+  $effect(() => {
+    transcriptState.wordElements[index] = element;
+    return () => {
+      delete transcriptState.wordElements[index];
+    };
+  });
 
   /**
    * @param {any} seconds
@@ -30,22 +41,22 @@
     if (e.key === "Backspace" && caretPos === 0) {
       if (index > 0) {
         e.preventDefault();
-        const prevWord = state.words[index - 1];
-        const currWord = state.words[index];
+        const prevWord = transcriptState.words[index - 1];
+        const currWord = transcriptState.words[index];
         const prevLength = prevWord.word.length;
 
-        state.words[index - 1].word = prevWord.word + currWord.word;
+        transcriptState.words[index - 1].word = prevWord.word + currWord.word;
         if (currWord.end) {
-          state.words[index - 1].end = currWord.end;
+          transcriptState.words[index - 1].end = currWord.end;
         }
 
-        state.words.splice(index, 1);
-        state.words = state.words;
-        state.pushState();
+        transcriptState.words.splice(index, 1);
+        transcriptState.words = transcriptState.words;
+        transcriptState.pushState();
 
         await tick();
 
-        const prevEl = document.getElementById(`word-${index - 1}`);
+        const prevEl = transcriptState.wordElements[index - 1];
         if (prevEl) {
           prevEl.focus();
           const range = document.createRange();
@@ -63,24 +74,24 @@
         }
       }
     } else if (e.key === "Delete" && caretPos === textLen) {
-      if (index < state.words.length - 1) {
+      if (index < transcriptState.words.length - 1) {
         e.preventDefault();
-        const currWord = state.words[index];
-        const nextWord = state.words[index + 1];
+        const currWord = transcriptState.words[index];
+        const nextWord = transcriptState.words[index + 1];
         const currLength = currWord.word.length;
 
-        state.words[index].word = currWord.word + nextWord.word;
+        transcriptState.words[index].word = currWord.word + nextWord.word;
         if (nextWord.end) {
-          state.words[index].end = nextWord.end;
+          transcriptState.words[index].end = nextWord.end;
         }
 
-        state.words.splice(index + 1, 1);
-        state.words = state.words;
-        state.pushState();
+        transcriptState.words.splice(index + 1, 1);
+        transcriptState.words = transcriptState.words;
+        transcriptState.pushState();
 
         await tick();
 
-        const currEl = document.getElementById(`word-${index}`);
+        const currEl = transcriptState.wordElements[index];
         if (currEl) {
           currEl.focus();
           const range = document.createRange();
@@ -100,7 +111,7 @@
     } else if (e.key === "ArrowLeft" && caretPos === 0) {
       if (index > 0) {
         e.preventDefault();
-        const prevEl = document.getElementById(`word-${index - 1}`);
+        const prevEl = transcriptState.wordElements[index - 1];
         if (prevEl) {
           prevEl.focus();
           const range = document.createRange();
@@ -118,9 +129,9 @@
         }
       }
     } else if (e.key === "ArrowRight" && caretPos === textLen) {
-      if (index < state.words.length - 1) {
+      if (index < transcriptState.words.length - 1) {
         e.preventDefault();
-        const nextEl = document.getElementById(`word-${index + 1}`);
+        const nextEl = transcriptState.wordElements[index + 1];
         if (nextEl) {
           nextEl.focus();
           const range = document.createRange();
@@ -145,8 +156,8 @@
    */
   function handleContextMenu(e) {
     e.preventDefault();
-    state.activeWordIndex = index;
-    state.contextMenu = {
+    transcriptState.activeWordIndex = index;
+    transcriptState.contextMenu = {
       show: true,
       x: e.clientX,
       y: e.clientY,
@@ -157,24 +168,25 @@
 </script>
 
 <span
+  bind:this={element}
   role="textbox"
   tabindex="0"
   id="word-{index}"
   class="word"
-  class:active={state.activeWordIndex === index}
+  class:active={transcriptState.activeWordIndex === index}
   contenteditable="true"
-  bind:textContent={state.words[index].word}
+  bind:textContent={transcriptState.words[index].word}
   onfocus={() => {
-    state.activeWordIndex = index;
-    if (state.words[index] && state.words[index].start) {
-      state.seekAudioTo(parseFloat(state.words[index].start));
+    transcriptState.activeWordIndex = index;
+    if (transcriptState.words[index] && transcriptState.words[index].start) {
+      transcriptState.seekAudioTo(parseFloat(transcriptState.words[index].start));
     }
   }}
-  onblur={() => state.pushState()}
+  onblur={() => transcriptState.pushState()}
   onclick={() => {
-    state.activeWordIndex = index;
-    if (state.words[index] && state.words[index].start) {
-      state.seekAudioTo(parseFloat(state.words[index].start));
+    transcriptState.activeWordIndex = index;
+    if (transcriptState.words[index] && transcriptState.words[index].start) {
+      transcriptState.seekAudioTo(parseFloat(transcriptState.words[index].start));
     }
   }}
   onkeydown={handleKeydown}

@@ -1,26 +1,26 @@
 <script>
   import { getContext } from "svelte";
 
-  const state = getContext("TRANSCRIPT_STATE");
+  const transcriptState = getContext("TRANSCRIPT_STATE");
 </script>
 
-{#if !state.isLoading && !state.errorMsg && state.speakers.length > 0}
+{#if !transcriptState.isLoading && !transcriptState.errorMsg && transcriptState.speakers.length > 0}
   <aside class="right-sidebar">
     <div class="legend-box">
       <h3 class="legend-title">Speakers</h3>
       <ul class="legend-list">
-        {#each state.speakers as sp (sp)}
+        {#each transcriptState.speakers as sp (sp)}
           <li class="legend-item">
             <span
               class="color-dot"
-              style="background-color: {state.speakerColors[sp]}"
+              style="background-color: {transcriptState.speakerColors[sp]}"
             ></span>
             <input
               class="speaker-name-input"
               value={sp}
               onblur={(e) => {
                 const target = /** @type {HTMLInputElement} */ (e.target);
-                if (target) state.renameSpeaker(sp, target.value);
+                if (target) transcriptState.renameSpeaker(sp, target.value);
               }}
               onkeydown={(e) => {
                 if (e.key === "Enter") {

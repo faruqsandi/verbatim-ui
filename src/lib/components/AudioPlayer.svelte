@@ -2,7 +2,7 @@
   import { getContext } from "svelte";
   import { Play, Pause, Square } from "@lucide/svelte";
 
-  const state = getContext("TRANSCRIPT_STATE");
+  const transcriptState = getContext("TRANSCRIPT_STATE");
 
   /**
    * @param {any} seconds
@@ -19,41 +19,41 @@
    * @param {any} e
    */
   function handleSeek(e) {
-    state.seekAudioTo(parseFloat(e.target.value));
+    transcriptState.seekAudioTo(parseFloat(e.target.value));
   }
 </script>
 
-{#if state.audioLoaded}
+{#if transcriptState.audioLoaded}
   <div class="audio-bar">
     <div class="audio-controls">
       <button
         class="audio-btn"
-        onclick={() => state.togglePlay()}
+        onclick={() => transcriptState.togglePlay()}
         title="Play/Pause (Space)"
       >
-        {#if state.audioPaused}
+        {#if transcriptState.audioPaused}
           <Play size={18} />
         {:else}
           <Pause size={18} />
         {/if}
       </button>
-      <button class="audio-btn" onclick={() => state.stopAudio()} title="Stop">
+      <button class="audio-btn" onclick={() => transcriptState.stopAudio()} title="Stop">
         <Square size={18} />
       </button>
     </div>
 
     <div class="audio-seeker-container">
-      <span class="audio-time">{formatTime(state.audioCurrentTime)}</span>
+      <span class="audio-time">{formatTime(transcriptState.audioCurrentTime)}</span>
       <input
         type="range"
         class="audio-seeker"
         min="0"
-        max={state.audioDuration || 0}
+        max={transcriptState.audioDuration || 0}
         step="0.01"
-        value={state.audioCurrentTime}
+        value={transcriptState.audioCurrentTime}
         oninput={handleSeek}
       />
-      <span class="audio-time">{formatTime(state.audioDuration)}</span>
+      <span class="audio-time">{formatTime(transcriptState.audioDuration)}</span>
     </div>
   </div>
 {/if}

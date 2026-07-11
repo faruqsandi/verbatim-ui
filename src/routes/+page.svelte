@@ -8,22 +8,22 @@
   import VirtualTable from "$lib/VirtualTable.svelte";
 
   // Instantiate the Svelte 5 state manager
-  const state = new TranscriptState();
+  const transcriptState = new TranscriptState();
 
   // Set the state in context so children can access it
-  setContext("TRANSCRIPT_STATE", state);
+  setContext("TRANSCRIPT_STATE", transcriptState);
 
   onMount(() => {
-    state.initDemo();
+    transcriptState.initDemo();
   });
 
   onDestroy(() => {
-    state.destroy();
+    transcriptState.destroy();
   });
 
   function handleGlobalClick() {
-    if (state.contextMenu.show) {
-      state.contextMenu.show = false;
+    if (transcriptState.contextMenu.show) {
+      transcriptState.contextMenu.show = false;
     }
   }
 
@@ -40,19 +40,19 @@
       if (!isEditing) {
         e.preventDefault();
         if (e.shiftKey) {
-          state.redo();
+          transcriptState.redo();
         } else {
-          state.undo();
+          transcriptState.undo();
         }
       }
     }
     
     if (e.ctrlKey && (e.key === "s" || e.key === "S")) {
       e.preventDefault();
-      state.saveCsv();
+      transcriptState.saveCsv();
     }
 
-    if ((e.code === "Space" || e.key === " ") && state.audioLoaded) {
+    if ((e.code === "Space" || e.key === " ") && transcriptState.audioLoaded) {
       const isEditing =
         document.activeElement &&
         (document.activeElement.hasAttribute("contenteditable") ||
@@ -61,7 +61,7 @@
 
       if (!isEditing) {
         e.preventDefault();
-        state.togglePlay();
+        transcriptState.togglePlay();
       }
     }
   }
@@ -80,28 +80,28 @@
 
 <svelte:window onclick={handleGlobalClick} onkeydown={handleGlobalKeydown} />
 
-<div class="app-container" style="--dynamic-scale: {state.fontScale}">
+<div class="app-container" style="--dynamic-scale: {transcriptState.fontScale}">
   <!-- Top Toolbar -->
   <Toolbar />
 
   <!-- Sticky Audio Player HUD -->
   <AudioPlayer />
 
-  <div class="content-wrapper {state.showTablePanel ? 'show-table' : ''}">
+  <div class="content-wrapper {transcriptState.showTablePanel ? 'show-table' : ''}">
     <!-- Left Sidebar (Data Table View) -->
-    {#if state.showTablePanel && !state.isLoading && !state.errorMsg}
+    {#if transcriptState.showTablePanel && !transcriptState.isLoading && !transcriptState.errorMsg}
       <aside class="left-sidebar">
         <div class="panel-header">
           <h3>Data View</h3>
         </div>
         <div class="panel-content">
           <VirtualTable
-            bind:words={state.words}
-            speakers={state.speakers}
-            bind:activeWordIndex={state.activeWordIndex}
+            bind:words={transcriptState.words}
+            speakers={transcriptState.speakers}
+            bind:activeWordIndex={transcriptState.activeWordIndex}
             onupdate={() => {
-              state.words = state.words;
-              state.pushState();
+              transcriptState.words = transcriptState.words;
+              transcriptState.pushState();
             }}
           />
         </div>
@@ -116,12 +116,12 @@
   </div>
 
   <!-- Context Menu for Speakers -->
-  {#if state.contextMenu.show && state.contextMenu.word}
+  {#if transcriptState.contextMenu.show && transcriptState.contextMenu.word}
     <!-- svelte-ignore a11y-click-events-have-key-events -->
     <!-- svelte-ignore a11y-no-static-element-interactions -->
     <div
       class="context-menu"
-      style="left: {state.contextMenu.x}px; top: {state.contextMenu.y}px;"
+      style="left: {transcriptState.contextMenu.x}px; top: {transcriptState.contextMenu.y}px;"
       onclick={(e) => e.stopPropagation()}
     >
       <div class="menu-item custom-dropdown-wrapper">
@@ -131,35 +131,35 @@
           <button
             class="custom-select-btn"
             onclick={() =>
-              (state.contextMenu.showDropdown = !state.contextMenu.showDropdown)}
+              (transcriptState.contextMenu.showDropdown = !transcriptState.contextMenu.showDropdown)}
           >
             <span
               class="color-dot"
-              style="background-color: {state.speakerColors[
-                state.contextMenu.word.speaker
+              style="background-color: {transcriptState.speakerColors[
+                transcriptState.contextMenu.word.speaker
               ] || '#ccc'}"
             ></span>
-            {state.contextMenu.word.speaker || "Unknown"}
+            {transcriptState.contextMenu.word.speaker || "Unknown"}
           </button>
 
-          {#if state.contextMenu.showDropdown}
+          {#if transcriptState.contextMenu.showDropdown}
             <div class="custom-select-dropdown">
-              {#each state.speakers as sp}
+              {#each transcriptState.speakers as sp}
                 <button
                   class="custom-option"
                   onclick={() => {
-                    if (state.contextMenu.word) {
-                      state.contextMenu.word.speaker = sp;
+                    if (transcriptState.contextMenu.word) {
+                      transcriptState.contextMenu.word.speaker = sp;
                     }
-                    state.words = state.words; // trigger reactivity
-                    state.contextMenu.showDropdown = false;
-                    state.contextMenu.show = false;
-                    state.pushState();
+                    transcriptState.words = transcriptState.words; // trigger reactivity
+                    transcriptState.contextMenu.showDropdown = false;
+                    transcriptState.contextMenu.show = false;
+                    transcriptState.pushState();
                   }}
                 >
                   <span
                     class="color-dot"
-                    style="background-color: {state.speakerColors[sp]}"
+                    style="background-color: {transcriptState.speakerColors[sp]}"
                   ></span>
                   {sp}
                 </button>
@@ -170,8 +170,8 @@
       </div>
       <div class="menu-item">
         <strong>Time:</strong>
-        {formatTime(state.contextMenu.word.start)} - {formatTime(
-          state.contextMenu.word.end,
+        {formatTime(transcriptState.contextMenu.word.start)} - {formatTime(
+          transcriptState.contextMenu.word.end,
         )}
       </div>
     </div>
