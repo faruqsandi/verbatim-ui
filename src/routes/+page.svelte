@@ -1,318 +1,35 @@
 <script>
-  import { onMount, onDestroy, tick } from "svelte";
-  import Papa from "papaparse";
-  import {
-    ZoomIn,
-    ZoomOut,
-    Table,
-    Upload,
-    Save,
-    Undo,
-    Redo,
-    Play,
-    Pause,
-    Square,
-    Music,
-  } from "@lucide/svelte";
+  import { onMount, onDestroy, setContext } from "svelte";
+  import { TranscriptState } from "$lib/state/transcript.svelte.js";
+  import Toolbar from "$lib/components/Toolbar.svelte";
+  import AudioPlayer from "$lib/components/AudioPlayer.svelte";
+  import TranscriptArea from "$lib/components/TranscriptArea.svelte";
+  import SpeakerLegend from "$lib/components/SpeakerLegend.svelte";
   import VirtualTable from "$lib/VirtualTable.svelte";
 
-  let words = [];
-  let errorMsg = "";
-  let isLoading = true;
-  let speakers = [];
-  let speakerColors = {};
+  // Instantiate the Svelte 5 state manager
+  const state = new TranscriptState();
 
-  let fileInput;
-  let audioInput;
+  // Set the state in context so children can access it
+  setContext("TRANSCRIPT_STATE", state);
 
-  // Web Audio API state
-  let audioCtx = null;
-  let audioBuffer = null;
-  let sourceNode = null;
-  let gainNode = null;
-  let audioLoaded = false;
-  let audioDuration = 0;
-  let audioCurrentTime = 0;
-  let audioPaused = true;
-  let _startOffset = 0;  // playback offset when last started/seeked
-  let _startCtxTime = 0; // audioCtx.currentTime when playback started
-  let _animFrameId = null;
-
-  function _ensureAudioCtx() {
-    if (!audioCtx) {
-      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    }
-    return audioCtx;
-  }
-
-  onDestroy(() => {
-    _stopSource();
-    if (_animFrameId) cancelAnimationFrame(_animFrameId);
-    if (audioCtx) { try { audioCtx.close(); } catch(e) {} }
+  onMount(() => {
+    state.initDemo();
   });
 
-  let history = [];
-  let currentHistoryIndex = -1;
-  const MAX_HISTORY = 50;
+  onDestroy(() => {
+    state.destroy();
+  });
 
-  let showUnderlines = true;
-  let showTablePanel = false;
-  let activeWordIndex = null;
-
-  let contextMenu = {
-    show: false,
-    x: 0,
-    y: 0,
-    word: null,
-    showDropdown: false,
-  };
-
-  const palette = [
-    "#3b82f6", // blue-500
-    "#10b981", // emerald-500
-    "#f59e0b", // amber-500
-    "#ef4444", // red-500
-    "#8b5cf6", // violet-500
-    "#ec4899", // pink-500
-    "#06b6d4", // cyan-500
-    "#f97316", // orange-500
-  ];
-
-  // Font size multiplier
-  let fontScale = 1.0;
-
-  function pushState() {
-    const newStr = JSON.stringify(words);
-    if (currentHistoryIndex >= 0 && currentHistoryIndex < history.length) {
-      const currentStateStr = JSON.stringify(history[currentHistoryIndex]);
-      if (currentStateStr === newStr) return; // no change
-    }
-
-    if (currentHistoryIndex < history.length - 1) {
-      history = history.slice(0, currentHistoryIndex + 1);
-    }
-
-    history.push(JSON.parse(newStr));
-
-    if (history.length > MAX_HISTORY) {
-      history.shift();
-    } else {
-      currentHistoryIndex++;
+  function handleGlobalClick() {
+    if (state.contextMenu.show) {
+      state.contextMenu.show = false;
     }
   }
 
-  function undo() {
-    if (currentHistoryIndex > 0) {
-      currentHistoryIndex--;
-      words = JSON.parse(JSON.stringify(history[currentHistoryIndex]));
-    }
-  }
-
-  function redo() {
-    if (currentHistoryIndex < history.length - 1) {
-      currentHistoryIndex++;
-      words = JSON.parse(JSON.stringify(history[currentHistoryIndex]));
-    }
-  }
-
-  function saveCsv() {
-    const csvStr = Papa.unparse(
-      words.map((w) => {
-        // Remove internal properties
-        const { id, originalIndex, ...rest } = w;
-        return rest;
-      }),
-    );
-    const blob = new Blob([csvStr], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.setAttribute("download", "transcript_edited.csv");
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  }
-
-  function triggerFileInput() {
-    if (fileInput) fileInput.click();
-  }
-
-  function triggerAudioInput() {
-    if (audioInput) audioInput.click();
-  }
-
-  function handleAudioUpload(event) {
-    const file = event.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      await _decodeAudioData(e.target.result);
-    };
-    reader.readAsArrayBuffer(file);
-  }
-
-  async function _decodeAudioData(arrayBuffer) {
-    try {
-      const ctx = _ensureAudioCtx();
-      // decodeAudioData consumes the buffer, so copy it
-      const copy = arrayBuffer.slice(0);
-      audioBuffer = await ctx.decodeAudioData(copy);
-      audioDuration = audioBuffer.duration;
-      _startOffset = 0;
-      audioCurrentTime = 0;
-      audioLoaded = true;
-      audioPaused = true;
-    } catch (err) {
-      console.error("Error decoding audio:", err);
-      audioLoaded = false;
-    }
-  }
-
-  async function loadAudioFromUrl(url) {
-    try {
-      const res = await fetch(url);
-      if (!res.ok) throw new Error("Failed to fetch audio: " + res.status);
-      const arrayBuffer = await res.arrayBuffer();
-      await _decodeAudioData(arrayBuffer);
-    } catch (err) {
-      console.error("Error loading audio:", err);
-      audioLoaded = false;
-    }
-  }
-
-  function _stopSource() {
-    if (sourceNode) {
-      try { sourceNode.onended = null; sourceNode.stop(); } catch(e) {}
-      try { sourceNode.disconnect(); } catch(e) {}
-      sourceNode = null;
-    }
-  }
-
-  function _updateTime() {
-    if (!audioPaused && audioCtx) {
-      audioCurrentTime = _startOffset + (audioCtx.currentTime - _startCtxTime);
-      if (audioCurrentTime >= audioDuration) {
-        // Reached the end
-        _stopSource();
-        audioPaused = true;
-        _startOffset = 0;
-        audioCurrentTime = 0;
-        return;
-      }
-      _animFrameId = requestAnimationFrame(_updateTime);
-    }
-  }
-
-  function _playFrom(offset) {
-    if (!audioBuffer) return;
-    const ctx = _ensureAudioCtx();
-    if (ctx.state === 'suspended') ctx.resume();
-
-    _stopSource();
-
-    sourceNode = ctx.createBufferSource();
-    sourceNode.buffer = audioBuffer;
-    if (!gainNode) {
-      gainNode = ctx.createGain();
-      gainNode.connect(ctx.destination);
-    }
-    sourceNode.connect(gainNode);
-
-    _startOffset = Math.max(0, Math.min(offset, audioDuration));
-    _startCtxTime = ctx.currentTime;
-    sourceNode.start(0, _startOffset);
-    audioPaused = false;
-
-    sourceNode.onended = () => {
-      if (!audioPaused) {
-        audioPaused = true;
-        _startOffset = 0;
-        audioCurrentTime = 0;
-        if (_animFrameId) cancelAnimationFrame(_animFrameId);
-      }
-    };
-
-    if (_animFrameId) cancelAnimationFrame(_animFrameId);
-    _animFrameId = requestAnimationFrame(_updateTime);
-  }
-
-  function togglePlay() {
-    if (!audioBuffer) return;
-    if (audioPaused) {
-      _playFrom(_startOffset);
-    } else {
-      // Pause: save current position
-      _startOffset = _startOffset + (audioCtx.currentTime - _startCtxTime);
-      audioCurrentTime = _startOffset;
-      _stopSource();
-      audioPaused = true;
-      if (_animFrameId) cancelAnimationFrame(_animFrameId);
-    }
-  }
-
-  function stopAudio() {
-    _stopSource();
-    audioPaused = true;
-    _startOffset = 0;
-    audioCurrentTime = 0;
-    if (_animFrameId) cancelAnimationFrame(_animFrameId);
-  }
-
-  function seekAudioTo(time) {
-    _startOffset = Math.max(0, Math.min(time, audioDuration));
-    audioCurrentTime = _startOffset;
-    if (!audioPaused) {
-      _playFrom(_startOffset);
-    }
-  }
-
-  function handleSeek(e) {
-    seekAudioTo(parseFloat(e.target.value));
-  }
-
-  function handleFileUpload(event) {
-    const file = event.target.files[0];
-    if (!file) return;
-
-    isLoading = true;
-    errorMsg = "";
-
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: (results) => {
-        words = results.data.map((w) => ({
-          ...w,
-          id: Math.random().toString(36).substring(2, 10),
-        }));
-
-        const uniqueSpeakers = [
-          ...new Set(words.map((w) => w.speaker).filter(Boolean)),
-        ];
-        speakers = uniqueSpeakers;
-        uniqueSpeakers.forEach((sp, idx) => {
-          speakerColors[sp] = palette[idx % palette.length];
-        });
-
-        history = [];
-        currentHistoryIndex = -1;
-        pushState();
-
-        // Try to load mp3 with same name
-        const expectedAudio = file.name.replace(/\.csv$/i, ".mp3");
-        const audioUrlCandidate = "/" + expectedAudio;
-        loadAudioFromUrl(audioUrlCandidate);
-
-        isLoading = false;
-      },
-      error: (err) => {
-        errorMsg = err.message;
-        isLoading = false;
-      },
-    });
-  }
-
+  /**
+   * @param {any} e
+   */
   function handleGlobalKeydown(e) {
     if (e.ctrlKey && (e.key === "z" || e.key === "Z")) {
       const isEditing =
@@ -323,18 +40,19 @@
       if (!isEditing) {
         e.preventDefault();
         if (e.shiftKey) {
-          redo();
+          state.redo();
         } else {
-          undo();
+          state.undo();
         }
       }
     }
+    
     if (e.ctrlKey && (e.key === "s" || e.key === "S")) {
       e.preventDefault();
-      saveCsv();
+      state.saveCsv();
     }
 
-    if ((e.code === "Space" || e.key === " ") && audioLoaded) {
+    if ((e.code === "Space" || e.key === " ") && state.audioLoaded) {
       const isEditing =
         document.activeElement &&
         (document.activeElement.hasAttribute("contenteditable") ||
@@ -343,113 +61,14 @@
 
       if (!isEditing) {
         e.preventDefault();
-        togglePlay();
+        state.togglePlay();
       }
     }
   }
 
-  $: sentenceGroups =
-    words.length > 0
-      ? words.reduce((groups, word, index) => {
-          const lastGroup = groups[groups.length - 1];
-          if (lastGroup && lastGroup.speaker === word.speaker) {
-            lastGroup.words.push({ word, index });
-          } else {
-            groups.push({
-              id: word.id, // Stable ID based on the first word
-              speaker: word.speaker,
-              words: [{ word, index }],
-            });
-          }
-          return groups;
-        }, [])
-      : [];
-
-  onMount(async () => {
-    // Load demo audio
-    loadAudioFromUrl("/artikulasi.mp3");
-
-    try {
-      const response = await fetch("/artikulasi.csv");
-      const csvStr = await response.text();
-      Papa.parse(csvStr, {
-        header: true,
-        skipEmptyLines: true,
-        complete: (results) => {
-          words = results.data.map((w) => ({
-            ...w,
-            id: Math.random().toString(36).substring(2, 10),
-          }));
-
-          const uniqueSpeakers = [
-            ...new Set(words.map((w) => w.speaker).filter(Boolean)),
-          ];
-          speakers = uniqueSpeakers;
-          uniqueSpeakers.forEach((sp, idx) => {
-            speakerColors[sp] = palette[idx % palette.length];
-          });
-
-          history = [];
-          currentHistoryIndex = -1;
-          pushState();
-
-          isLoading = false;
-        },
-        error: (err) => {
-          errorMsg = err.message;
-          isLoading = false;
-        },
-      });
-    } catch (e) {
-      errorMsg = e.toString();
-      isLoading = false;
-    }
-  });
-
-  $: {
-    if (audioLoaded && words.length > 0) {
-      let foundIndex = null;
-      for (let i = 0; i < words.length; i++) {
-        const w = words[i];
-        if (
-          audioCurrentTime >= parseFloat(w.start) &&
-          audioCurrentTime <= parseFloat(w.end)
-        ) {
-          foundIndex = i;
-          break;
-        }
-      }
-
-      if (foundIndex !== activeWordIndex) {
-        activeWordIndex = foundIndex;
-        if (foundIndex !== null) {
-          tick().then(() => {
-            const wordEl = document.getElementById(`word-${foundIndex}`);
-            if (wordEl) {
-              const rect = wordEl.getBoundingClientRect();
-              // Only scroll if out of vertical bounds (150px from top, 150px from bottom)
-              if (rect.top < 150 || rect.bottom > window.innerHeight - 150) {
-                window.scrollBy({
-                  top: rect.top - window.innerHeight / 2,
-                  behavior: "smooth",
-                });
-              }
-            }
-          });
-        }
-      }
-    }
-  }
-
-  function increaseFontSize() {
-    if (fontScale < 2.5) fontScale += 0.1;
-  }
-
-  function decreaseFontSize() {
-    if (fontScale > 0.6) fontScale -= 0.1;
-  }
-
-  // Format time for tooltip
+  /**
+   * @param {any} seconds
+   */
   function formatTime(seconds) {
     if (!seconds) return "0:00";
     const s = parseFloat(seconds);
@@ -457,435 +76,53 @@
     const sec = Math.floor(s % 60);
     return `${m}:${sec.toString().padStart(2, "0")}`;
   }
-
-  async function handleKeydown(e, index) {
-    const selection = window.getSelection();
-    if (!selection.isCollapsed) return;
-
-    const caretPos = selection.anchorOffset;
-    const textLen = e.target.textContent.length;
-
-    if (e.key === "Backspace" && caretPos === 0) {
-      if (index > 0) {
-        e.preventDefault();
-        const prevWord = words[index - 1];
-        const currWord = words[index];
-
-        const prevLength = prevWord.word.length;
-
-        words[index - 1].word = prevWord.word + currWord.word;
-        if (currWord.end) {
-          words[index - 1].end = currWord.end;
-        }
-
-        words.splice(index, 1);
-        words = words;
-        pushState();
-
-        await tick();
-
-        const prevEl = document.getElementById(`word-${index - 1}`);
-        if (prevEl) {
-          prevEl.focus();
-          const range = document.createRange();
-          const sel = window.getSelection();
-          if (prevEl.firstChild) {
-            range.setStart(prevEl.firstChild, prevLength);
-          } else {
-            range.setStart(prevEl, 0);
-          }
-          range.collapse(true);
-          sel.removeAllRanges();
-          sel.addRange(range);
-        }
-      }
-    } else if (e.key === "Delete" && caretPos === textLen) {
-      if (index < words.length - 1) {
-        e.preventDefault();
-        const currWord = words[index];
-        const nextWord = words[index + 1];
-
-        const currLength = currWord.word.length;
-
-        words[index].word = currWord.word + nextWord.word;
-        if (nextWord.end) {
-          words[index].end = nextWord.end;
-        }
-
-        words.splice(index + 1, 1);
-        words = words;
-        pushState();
-
-        await tick();
-
-        const currEl = document.getElementById(`word-${index}`);
-        if (currEl) {
-          currEl.focus();
-          const range = document.createRange();
-          const sel = window.getSelection();
-          if (currEl.firstChild) {
-            range.setStart(currEl.firstChild, currLength);
-          } else {
-            range.setStart(currEl, 0);
-          }
-          range.collapse(true);
-          sel.removeAllRanges();
-          sel.addRange(range);
-        }
-      }
-    } else if (e.key === "ArrowLeft" && caretPos === 0) {
-      if (index > 0) {
-        e.preventDefault();
-        const prevEl = document.getElementById(`word-${index - 1}`);
-        if (prevEl) {
-          prevEl.focus();
-          const range = document.createRange();
-          const sel = window.getSelection();
-          if (prevEl.firstChild) {
-            range.setStart(prevEl.firstChild, prevEl.textContent.length);
-          } else {
-            range.setStart(prevEl, 0);
-          }
-          range.collapse(true);
-          sel.removeAllRanges();
-          sel.addRange(range);
-        }
-      }
-    } else if (e.key === "ArrowRight" && caretPos === textLen) {
-      if (index < words.length - 1) {
-        e.preventDefault();
-        const nextEl = document.getElementById(`word-${index + 1}`);
-        if (nextEl) {
-          nextEl.focus();
-          const range = document.createRange();
-          const sel = window.getSelection();
-          if (nextEl.firstChild) {
-            range.setStart(nextEl.firstChild, 0);
-          } else {
-            range.setStart(nextEl, 0);
-          }
-          range.collapse(true);
-          sel.removeAllRanges();
-          sel.addRange(range);
-        }
-      }
-    }
-  }
-
-  function handleContextMenu(e, wordData, index) {
-    e.preventDefault();
-    activeWordIndex = index;
-    contextMenu = {
-      show: true,
-      x: e.clientX,
-      y: e.clientY,
-      word: wordData,
-      showDropdown: false,
-    };
-  }
-
-  function handleGlobalClick() {
-    if (contextMenu.show) {
-      contextMenu.show = false;
-    }
-  }
-
-  function renameSpeaker(oldName, newName) {
-    newName = newName.trim();
-    if (!newName || oldName === newName) return;
-
-    let changed = false;
-    words = words.map((w) => {
-      if (w.speaker === oldName) {
-        changed = true;
-        return { ...w, speaker: newName };
-      }
-      return w;
-    });
-
-    if (changed) {
-      const uniqueSpeakers = [
-        ...new Set(words.map((w) => w.speaker).filter(Boolean)),
-      ];
-      speakers = uniqueSpeakers;
-      if (!speakerColors[newName]) {
-        speakerColors[newName] = speakerColors[oldName];
-      }
-      pushState();
-    }
-  }
 </script>
 
-<svelte:window on:click={handleGlobalClick} on:keydown={handleGlobalKeydown} />
+<svelte:window onclick={handleGlobalClick} onkeydown={handleGlobalKeydown} />
 
-<input
-  type="file"
-  accept=".csv"
-  style="display: none;"
-  bind:this={fileInput}
-  on:change={handleFileUpload}
-/>
-<input
-  type="file"
-  accept="audio/*"
-  style="display: none;"
-  bind:this={audioInput}
-  on:change={handleAudioUpload}
-/>
-
-<!-- No <audio> element needed - using Web Audio API -->
-
-<svelte:head>
-  {@html `<style>
-    ${speakers
-      .map(
-        (sp, idx) => `
-      .speaker-sp-${idx} {
-        text-decoration: ${showUnderlines ? "underline" : "none"};
-        text-decoration-color: ${speakerColors[sp] || "transparent"};
-        text-decoration-thickness: 1.5px;
-        text-underline-offset: 4px;
-      }
-    `,
-      )
-      .join("\n")}
-  </style>`}
-</svelte:head>
-
-<div class="app-container" style="--dynamic-scale: {fontScale}">
+<div class="app-container" style="--dynamic-scale: {state.fontScale}">
   <!-- Top Toolbar -->
-  <header class="toolbar">
-    <div class="toolbar-title">Reader</div>
-    <div class="font-controls">
-      <label class="toggle-label">
-        <input type="checkbox" bind:checked={showUnderlines} />
-        Underlines
-      </label>
-      <div class="divider"></div>
-      <label class="toggle-label">
-        <input type="checkbox" bind:checked={showTablePanel} />
-        Data Table
-      </label>
-      <div class="divider"></div>
-      <button on:click={triggerFileInput} title="Load CSV" class="icon-btn">
-        <Upload size={20} />
-      </button>
-      <button on:click={triggerAudioInput} title="Load Audio" class="icon-btn">
-        <Music size={20} />
-      </button>
-      <button on:click={saveCsv} title="Save CSV (Ctrl+S)" class="icon-btn">
-        <Save size={20} />
-      </button>
-      <button
-        on:click={undo}
-        disabled={currentHistoryIndex <= 0}
-        title="Undo (Ctrl+Z)"
-        class="icon-btn"
-        class:disabled={currentHistoryIndex <= 0}
-      >
-        <Undo size={20} />
-      </button>
-      <button
-        on:click={redo}
-        disabled={currentHistoryIndex >= history.length - 1}
-        title="Redo (Ctrl+Shift+Z)"
-        class="icon-btn"
-        class:disabled={currentHistoryIndex >= history.length - 1}
-      >
-        <Redo size={20} />
-      </button>
-      <div class="divider"></div>
-      <button
-        on:click={decreaseFontSize}
-        title="Decrease Font Size"
-        class="icon-btn"
-      >
-        <ZoomOut size={20} />
-      </button>
-      <div class="scale-indicator">{Math.round(fontScale * 100)}%</div>
-      <button
-        on:click={increaseFontSize}
-        title="Increase Font Size"
-        class="icon-btn"
-      >
-        <ZoomIn size={20} />
-      </button>
-    </div>
-  </header>
+  <Toolbar />
 
-  {#if audioLoaded}
-    <!-- Sticky Audio Bar -->
-    <div class="audio-bar">
-      <div class="audio-controls">
-        <button
-          class="audio-btn"
-          on:click={togglePlay}
-          title="Play/Pause (Space)"
-        >
-          {#if audioPaused}
-            <Play size={18} />
-          {:else}
-            <Pause size={18} />
-          {/if}
-        </button>
-        <button class="audio-btn" on:click={stopAudio} title="Stop">
-          <Square size={18} />
-        </button>
-      </div>
+  <!-- Sticky Audio Player HUD -->
+  <AudioPlayer />
 
-      <div class="audio-seeker-container">
-        <span class="audio-time">{formatTime(audioCurrentTime)}</span>
-        <input
-          type="range"
-          class="audio-seeker"
-          min="0"
-          max={audioDuration || 0}
-          step="0.01"
-          value={audioCurrentTime}
-          on:input={handleSeek}
-        />
-        <span class="audio-time">{formatTime(audioDuration)}</span>
-      </div>
-    </div>
-  {/if}
-
-  <div class="content-wrapper {showTablePanel ? 'show-table' : ''}">
-    <!-- Left Sidebar (Table Panel) -->
-    {#if showTablePanel && !isLoading && !errorMsg}
+  <div class="content-wrapper {state.showTablePanel ? 'show-table' : ''}">
+    <!-- Left Sidebar (Data Table View) -->
+    {#if state.showTablePanel && !state.isLoading && !state.errorMsg}
       <aside class="left-sidebar">
         <div class="panel-header">
           <h3>Data View</h3>
         </div>
         <div class="panel-content">
           <VirtualTable
-            bind:words
-            {speakers}
-            bind:activeWordIndex
-            on:update={() => {
-              words = words;
-              pushState();
+            bind:words={state.words}
+            speakers={state.speakers}
+            bind:activeWordIndex={state.activeWordIndex}
+            onupdate={() => {
+              state.words = state.words;
+              state.pushState();
             }}
           />
         </div>
       </aside>
     {/if}
 
-    <!-- Reading Area -->
-    <main class="reading-area">
-      {#if isLoading}
-        <div class="loading">Loading content...</div>
-      {:else if errorMsg}
-        <div class="error">{errorMsg}</div>
-      {:else}
-        <div class="chat-container">
-          {#each sentenceGroups as group (group.id)}
-            <div class="chat-message">
-              <div class="message-meta">
-                <div
-                  class="speaker-avatar"
-                  style="background-color: {speakerColors[group.speaker] ||
-                    '#ccc'}"
-                  title={group.speaker || "Unknown"}
-                ></div>
-                <div class="message-time">
-                  {formatTime(group.words[0].word.start)} - {formatTime(
-                    group.words[group.words.length - 1].word.end,
-                  )}
-                </div>
-                <div class="message-duration">
-                  {(
-                    (parseFloat(group.words[group.words.length - 1].word.end) ||
-                      0) - (parseFloat(group.words[0].word.start) || 0)
-                  ).toFixed(1)}s
-                </div>
-              </div>
-              <div class="message-content paragraph">
-                <span
-                  class="sentence {group.speaker
-                    ? `speaker-sp-${speakers.indexOf(group.speaker)}`
-                    : ''}"
-                >
-                  {#each group.words as item, wIdx (item.word.id)}
-                    <span
-                      role="textbox"
-                      tabindex="0"
-                      id="word-{item.index}"
-                      class="word"
-                      class:active={activeWordIndex === item.index}
-                      contenteditable="true"
-                      bind:textContent={words[item.index].word}
-                      on:focus={() => {
-                        activeWordIndex = item.index;
-                        if (words[item.index] && words[item.index].start) {
-                          seekAudioTo(parseFloat(
-                            words[item.index].start,
-                          ));
-                        }
-                      }}
-                      on:blur={() => pushState()}
-                      on:click={() => {
-                        activeWordIndex = item.index;
-                        if (words[item.index] && words[item.index].start) {
-                          seekAudioTo(parseFloat(
-                            words[item.index].start,
-                          ));
-                        }
-                      }}
-                      on:keydown={(e) => handleKeydown(e, item.index)}
-                      on:contextmenu={(e) =>
-                        handleContextMenu(e, item.word, item.index)}
-                      title="{item.word.speaker || 'Unknown'} • {formatTime(
-                        item.word.start,
-                      )} - {formatTime(item.word.end)} • Score: {item.word
-                        .score}"
-                    ></span>{#if wIdx < group.words.length - 1}{" "}{/if}
-                  {/each}
-                </span>
-              </div>
-            </div>
-          {/each}
-        </div>
-      {/if}
-    </main>
+    <!-- Reading/Transcript Area -->
+    <TranscriptArea />
 
     <!-- Legend Sidebar -->
-    {#if !isLoading && !errorMsg && speakers.length > 0}
-      <aside class="right-sidebar">
-        <div class="legend-box">
-          <h3 class="legend-title">Speakers</h3>
-          <ul class="legend-list">
-            {#each speakers as sp (sp)}
-              <li class="legend-item">
-                <span
-                  class="color-dot"
-                  style="background-color: {speakerColors[sp]}"
-                ></span>
-                <input
-                  class="speaker-name-input"
-                  value={sp}
-                  on:blur={(e) => renameSpeaker(sp, e.target.value)}
-                  on:keydown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      e.target.blur();
-                    }
-                  }}
-                />
-              </li>
-            {/each}
-          </ul>
-        </div>
-      </aside>
-    {/if}
+    <SpeakerLegend />
   </div>
 
-  {#if contextMenu.show && contextMenu.word}
+  <!-- Context Menu for Speakers -->
+  {#if state.contextMenu.show && state.contextMenu.word}
     <!-- svelte-ignore a11y-click-events-have-key-events -->
     <!-- svelte-ignore a11y-no-static-element-interactions -->
     <div
       class="context-menu"
-      style="left: {contextMenu.x}px; top: {contextMenu.y}px;"
-      on:click|stopPropagation
+      style="left: {state.contextMenu.x}px; top: {state.contextMenu.y}px;"
+      onclick={(e) => e.stopPropagation()}
     >
       <div class="menu-item custom-dropdown-wrapper">
         <strong>Speaker:</strong>
@@ -893,34 +130,36 @@
         <div class="custom-select-container">
           <button
             class="custom-select-btn"
-            on:click={() =>
-              (contextMenu.showDropdown = !contextMenu.showDropdown)}
+            onclick={() =>
+              (state.contextMenu.showDropdown = !state.contextMenu.showDropdown)}
           >
             <span
               class="color-dot"
-              style="background-color: {speakerColors[
-                contextMenu.word.speaker
+              style="background-color: {state.speakerColors[
+                state.contextMenu.word.speaker
               ] || '#ccc'}"
             ></span>
-            {contextMenu.word.speaker || "Unknown"}
+            {state.contextMenu.word.speaker || "Unknown"}
           </button>
 
-          {#if contextMenu.showDropdown}
+          {#if state.contextMenu.showDropdown}
             <div class="custom-select-dropdown">
-              {#each speakers as sp}
+              {#each state.speakers as sp}
                 <button
                   class="custom-option"
-                  on:click={() => {
-                    contextMenu.word.speaker = sp;
-                    words = words;
-                    contextMenu.showDropdown = false;
-                    contextMenu.show = false;
-                    pushState();
+                  onclick={() => {
+                    if (state.contextMenu.word) {
+                      state.contextMenu.word.speaker = sp;
+                    }
+                    state.words = state.words; // trigger reactivity
+                    state.contextMenu.showDropdown = false;
+                    state.contextMenu.show = false;
+                    state.pushState();
                   }}
                 >
                   <span
                     class="color-dot"
-                    style="background-color: {speakerColors[sp]}"
+                    style="background-color: {state.speakerColors[sp]}"
                   ></span>
                   {sp}
                 </button>
@@ -931,8 +170,8 @@
       </div>
       <div class="menu-item">
         <strong>Time:</strong>
-        {formatTime(contextMenu.word.start)} - {formatTime(
-          contextMenu.word.end,
+        {formatTime(state.contextMenu.word.start)} - {formatTime(
+          state.contextMenu.word.end,
         )}
       </div>
     </div>
@@ -944,170 +183,6 @@
     display: flex;
     flex-direction: column;
     min-height: 100vh;
-  }
-
-  /* Toolbar styling - minimalist, stays out of the way */
-  .toolbar {
-    position: sticky;
-    top: 0;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 1rem 2rem;
-    background: rgba(255, 255, 255, 0.95);
-    backdrop-filter: blur(8px);
-    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
-    z-index: 20;
-  }
-
-  .audio-bar {
-    position: sticky;
-    top: 70px; /* Below the toolbar */
-    display: flex;
-    align-items: center;
-    gap: 1.5rem;
-    padding: 0.75rem 2rem;
-    background: rgba(248, 250, 252, 0.95);
-    backdrop-filter: blur(8px);
-    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
-    z-index: 15;
-  }
-
-  .audio-controls {
-    display: flex;
-    gap: 0.5rem;
-  }
-
-  .audio-btn {
-    background: none;
-    border: none;
-    color: var(--text-color, #334155);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0.4rem;
-    border-radius: 6px;
-    transition: background-color 0.2s;
-  }
-
-  .audio-btn:hover {
-    background-color: rgba(0, 0, 0, 0.05);
-  }
-
-  .audio-seeker-container {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-  }
-
-  .audio-time {
-    font-family: var(--font-ui, monospace);
-    font-size: 0.8rem;
-    color: #64748b;
-    font-variant-numeric: tabular-nums;
-    min-width: 45px;
-    text-align: center;
-  }
-
-  .audio-seeker {
-    flex: 1;
-    height: 6px;
-    -webkit-appearance: none;
-    appearance: none;
-    background: rgba(0, 0, 0, 0.1);
-    border-radius: 3px;
-    outline: none;
-    cursor: pointer;
-  }
-
-  .audio-seeker::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    appearance: none;
-    width: 14px;
-    height: 14px;
-    border-radius: 50%;
-    background: var(--accent-color, #3b82f6);
-    cursor: pointer;
-    transition: transform 0.1s;
-  }
-
-  .audio-seeker::-webkit-slider-thumb:hover {
-    transform: scale(1.2);
-  }
-
-  .toolbar-title {
-    font-family: var(--font-ui);
-    font-weight: 500;
-    color: var(--ui-color);
-    letter-spacing: 0.5px;
-    font-size: 0.9rem;
-  }
-
-  .font-controls {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-  }
-
-  .toggle-label {
-    display: flex;
-    align-items: center;
-    gap: 0.35rem;
-    font-family: var(--font-ui);
-    font-size: 0.85rem;
-    color: var(--ui-color);
-    cursor: pointer;
-    user-select: none;
-  }
-
-  .toggle-label input[type="checkbox"] {
-    cursor: pointer;
-  }
-
-  .divider {
-    width: 1px;
-    height: 1.25rem;
-    background-color: rgba(0, 0, 0, 0.1);
-    margin: 0 0.5rem;
-  }
-
-  .scale-indicator {
-    font-family: var(--font-ui);
-    font-size: 0.85rem;
-    color: var(--ui-color);
-    width: 40px;
-    text-align: center;
-  }
-
-  .icon-btn {
-    background: none;
-    border: none;
-    color: var(--text-color);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0.5rem;
-    border-radius: 6px;
-    transition:
-      background-color 0.2s,
-      transform 0.1s;
-  }
-
-  .icon-btn:hover {
-    background-color: rgba(0, 0, 0, 0.04);
-  }
-
-  .icon-btn:active {
-    transform: scale(0.95);
-  }
-
-  .icon-btn.disabled {
-    opacity: 0.3;
-    cursor: not-allowed;
-    transform: none;
   }
 
   .content-wrapper {
@@ -1160,183 +235,6 @@
     min-height: 0;
   }
 
-  /* Main reading area */
-  .reading-area {
-    flex: 1;
-    max-width: 800px;
-    padding: 2rem;
-    width: 100%;
-  }
-
-  /* Right Sidebar */
-  .right-sidebar {
-    width: 250px;
-    padding: 4rem 1rem;
-    position: sticky;
-    top: 130px; /* offset by toolbar + audio bar height */
-    align-self: flex-start;
-    max-height: calc(100vh - 130px);
-    overflow-y: auto;
-  }
-
-  @media (max-width: 1000px) {
-    .right-sidebar {
-      display: none; /* Hide on smaller screens to maintain reading focus */
-    }
-  }
-
-  .legend-box {
-    background: rgba(255, 255, 255, 0.5);
-    backdrop-filter: blur(8px);
-    border: 1px solid rgba(0, 0, 0, 0.05);
-    border-radius: 12px;
-    padding: 1.5rem;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.02);
-  }
-
-  .legend-title {
-    font-family: var(--font-ui);
-    font-size: 0.85rem;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    color: var(--ui-color);
-    margin: 0 0 1rem 0;
-    font-weight: 600;
-  }
-
-  .legend-list {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-  }
-
-  .legend-item {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    font-family: var(--font-ui);
-    font-size: 0.9rem;
-    color: var(--text-color);
-  }
-
-  .color-dot {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    flex-shrink: 0;
-  }
-
-  .speaker-name-input {
-    background: transparent;
-    border: 1px solid transparent;
-    border-radius: 4px;
-    padding: 2px 6px;
-    font-family: inherit;
-    font-size: 0.9rem;
-    color: var(--text-color);
-    width: 100%;
-    transition:
-      background-color 0.2s,
-      border-color 0.2s;
-  }
-
-  .speaker-name-input:hover {
-    background-color: rgba(255, 255, 255, 0.5);
-    border-color: rgba(0, 0, 0, 0.1);
-  }
-
-  .speaker-name-input:focus {
-    background-color: white;
-    border-color: var(--ui-color, #4a90e2);
-    outline: none;
-  }
-
-  .paragraph {
-    /* Base size is 18px, dynamically scaled */
-    font-size: calc(var(--base-size) * var(--dynamic-scale));
-    line-height: 1.8;
-    text-align: left;
-    transition: font-size 0.2s ease-out;
-  }
-
-  .chat-container {
-    display: flex;
-    flex-direction: column;
-    gap: 1.5rem;
-    padding-bottom: 2rem;
-  }
-
-  .chat-message {
-    display: flex;
-    gap: 1.25rem;
-    align-items: flex-start;
-  }
-
-  .message-meta {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    min-width: 80px;
-    flex-shrink: 0;
-    margin-top: 0.25rem;
-  }
-
-  .speaker-avatar {
-    width: 42px;
-    height: 42px;
-    border-radius: 50%;
-    margin-bottom: 0.5rem;
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-  }
-
-  .message-time {
-    font-family: var(--font-ui);
-    font-size: 0.75rem;
-    color: #666;
-    text-align: center;
-    line-height: 1.4;
-    white-space: nowrap;
-  }
-
-  .message-duration {
-    font-family: var(--font-ui);
-    font-size: 0.7rem;
-    color: #999;
-    text-align: center;
-    line-height: 1.4;
-  }
-
-  .word {
-    cursor: text;
-    border-radius: 4px;
-    transition:
-      background-color 0.2s,
-      color 0.2s;
-    outline: none;
-  }
-
-  /* Subtle hover effect to keep it distraction-free but interactive */
-  .word:hover,
-  .word.active {
-    background-color: rgba(74, 144, 226, 0.15);
-    color: var(--accent-color);
-  }
-
-  .loading,
-  .error {
-    font-family: var(--font-ui);
-    text-align: center;
-    color: var(--ui-color);
-    margin-top: 20vh;
-  }
-
-  .error {
-    color: #e74c3c;
-  }
-
   .context-menu {
     position: fixed;
     background: rgba(255, 255, 255, 0.95);
@@ -1362,23 +260,6 @@
   .menu-item strong {
     font-weight: 600;
     color: var(--ui-color);
-  }
-
-  .speaker-select {
-    font-family: inherit;
-    font-size: 0.85rem;
-    padding: 0.2rem 0.5rem;
-    border-radius: 4px;
-    border: 1px solid rgba(0, 0, 0, 0.2);
-    background: white;
-    color: var(--text-color);
-    outline: none;
-    cursor: pointer;
-    flex: 1;
-  }
-
-  .speaker-select:focus {
-    border-color: var(--ui-color);
   }
 
   .custom-dropdown-wrapper {
@@ -1448,5 +329,12 @@
 
   .custom-option:hover {
     background: rgba(0, 0, 0, 0.05);
+  }
+
+  .color-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
   }
 </style>

@@ -1,43 +1,56 @@
 <script>
-  import { createEventDispatcher } from 'svelte';
-  
-  export let words = [];
-  export let speakers = [];
-  export let activeWordIndex = null;
+  /**
+   * @typedef {Object} Props
+   * @property {any[]} [words]
+   * @property {string[]} [speakers]
+   * @property {number | null} [activeWordIndex]
+   * @property {() => void} [onupdate]
+   */
 
-  const dispatch = createEventDispatcher();
+  /** @type {Props} */
+  let { 
+    words = $bindable([]), 
+    speakers = [], 
+    activeWordIndex = $bindable(null),
+    onupdate
+  } = $props();
 
+  /** @type {HTMLDivElement} */
   let viewport;
-  let scrollTop = 0;
+  let scrollTop = $state(0);
   const itemHeight = 36; // Height of each row in px
 
-  let viewportHeight = 600;
+  let viewportHeight = $state(600);
 
-  // We add a buffer of items outside the viewport to prevent flickering when scrolling
+  // Buffer of items outside the viewport to prevent flickering when scrolling
   const buffer = 10; 
 
-  $: startIndex = Math.max(0, Math.floor(scrollTop / itemHeight) - buffer);
-  $: visibleCount = Math.ceil(viewportHeight / itemHeight) + (buffer * 2);
-  $: endIndex = Math.min(words.length, startIndex + visibleCount);
+  // Derived variables using Svelte 5 syntax
+  let startIndex = $derived(Math.max(0, Math.floor(scrollTop / itemHeight) - buffer));
+  let visibleCount = $derived(Math.ceil(viewportHeight / itemHeight) + (buffer * 2));
+  let endIndex = $derived(Math.min(words.length, startIndex + visibleCount));
 
-  $: visibleWords = words.slice(startIndex, endIndex).map((word, i) => ({
-    ...word,
-    originalIndex: startIndex + i
-  }));
+  let visibleWords = $derived(
+    words.slice(startIndex, endIndex).map((word, i) => ({
+      ...word,
+      originalIndex: startIndex + i
+    }))
+  );
 
-  $: topPadding = startIndex * itemHeight;
-  $: bottomPadding = Math.max(0, (words.length - endIndex) * itemHeight);
+  let topPadding = $derived(startIndex * itemHeight);
+  let bottomPadding = $derived(Math.max(0, (words.length - endIndex) * itemHeight));
 
   function handleScroll() {
     scrollTop = viewport.scrollTop;
   }
 
   function handleUpdate() {
-    // Notify parent to trigger reactivity if needed
-    dispatch('update');
+    onupdate?.();
   }
 
-  // Format time for table
+  /**
+   * @param {any} seconds
+   */
   function formatTime(seconds) {
     if (!seconds) return '0:00';
     const s = parseFloat(seconds);
@@ -47,27 +60,30 @@
   }
 
   // Auto-scroll when activeWordIndex changes externally
+  /** @type {number | null} */
   let prevActiveWordIndex = null;
-  $: if (activeWordIndex !== prevActiveWordIndex) {
-    prevActiveWordIndex = activeWordIndex;
-    if (activeWordIndex !== null && activeWordIndex !== undefined && viewport) {
-      // Check if the row is outside the current viewport
-      const currentScroll = viewport.scrollTop;
-      const currentHeight = viewport.clientHeight;
-      const rowTop = activeWordIndex * itemHeight;
-      const rowBottom = rowTop + itemHeight;
-      const isVisible = rowTop >= currentScroll && rowBottom <= (currentScroll + currentHeight);
-      
-      if (!isVisible) {
-        // Center the row in the viewport
-        const targetScroll = Math.max(0, rowTop - (currentHeight / 2) + (itemHeight / 2));
-        viewport.scrollTo({ top: targetScroll, behavior: 'auto' });
+  $effect(() => {
+    if (activeWordIndex !== prevActiveWordIndex) {
+      prevActiveWordIndex = activeWordIndex;
+      if (activeWordIndex !== null && activeWordIndex !== undefined && viewport) {
+        // Check if the row is outside the current viewport
+        const currentScroll = viewport.scrollTop;
+        const currentHeight = viewport.clientHeight;
+        const rowTop = activeWordIndex * itemHeight;
+        const rowBottom = rowTop + itemHeight;
+        const isVisible = rowTop >= currentScroll && rowBottom <= (currentScroll + currentHeight);
+        
+        if (!isVisible) {
+          // Center the row in the viewport
+          const targetScroll = Math.max(0, rowTop - (currentHeight / 2) + (itemHeight / 2));
+          viewport.scrollTo({ top: targetScroll, behavior: 'auto' });
+        }
       }
     }
-  }
+  });
 </script>
 
-<div class="table-viewport" bind:this={viewport} on:scroll={handleScroll} bind:clientHeight={viewportHeight}>
+<div class="table-viewport" bind:this={viewport} onscroll={handleScroll} bind:clientHeight={viewportHeight}>
   <table class="virtual-table">
     <thead>
       <tr>
@@ -96,14 +112,14 @@
               type="text" 
               class="inline-input" 
               bind:value={words[item.originalIndex].word} 
-              on:blur={handleUpdate} 
+              onblur={handleUpdate} 
             />
           </td>
           <td class="cell-speaker">
             <select 
               class="inline-select" 
               bind:value={words[item.originalIndex].speaker} 
-              on:change={handleUpdate}
+              onchange={handleUpdate}
             >
               {#each speakers as sp}
                 <option value={sp}>{sp}</option>
