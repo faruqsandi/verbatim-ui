@@ -1,5 +1,7 @@
 import { tick } from "svelte";
 import Papa from "papaparse";
+import { isTauri } from "../utils/env.js";
+import { applyPatch, compare } from "fast-json-patch";
 
 /**
  * @param {any} seconds
@@ -18,9 +20,26 @@ function formatTimeSub(seconds, isSrt = false) {
   return `${pad(hrs)}:${pad(mins)}:${pad(secs)}${msDelim}${pad(ms, 3)}`;
 }
 
+/**
+ * @typedef {Object} Word
+ * @property {string} id
+ * @property {string} word
+ * @property {string} start
+ * @property {string} end
+ * @property {string} speaker
+ * @property {number} [score]
+ */
+
+/**
+ * @typedef {Object} SentenceGroup
+ * @property {string} id
+ * @property {string} speaker
+ * @property {Array<{word: Word, index: number}>} words
+ */
+
 export class TranscriptState {
   // Reactive state using Svelte 5 runes
-  /** @type {any[]} */
+  /** @type {Word[]} */
   words = $state([]);
   /** @type {number | null} */
   activeWordIndex = $state(null);
@@ -31,6 +50,7 @@ export class TranscriptState {
   showUnderlines = $state(true);
   showTablePanel = $state(false);
   fontScale = $state(1.0);
+  isDarkMode = $state(false);
 
   // Audio Playback State
   audioLoaded = $state(false);
@@ -132,6 +152,15 @@ export class TranscriptState {
       this.audioLoaded = true;
     };
 
+    this.audio.onerror = () => {
+      this.errorMsg = "Error: Failed to load audio file.";
+      this.isLoading = false;
+    };
+
+    this.audio.onstalled = () => {
+      this.errorMsg = "Warning: Audio loading stalled.";
+    };
+
     this.audio.onseeked = () => {
       this.audioCurrentTime = this.audio.currentTime;
     };
@@ -139,6 +168,18 @@ export class TranscriptState {
     this.audio.onratechange = () => {
       this.playbackRate = this.audio.playbackRate;
     };
+  }
+
+  /**
+   * @param {any} results
+   */
+  _validateCsv(results) {
+    const required = ["word", "start", "end", "score", "speaker"];
+    const fields = results.meta.fields || (results.data[0] ? Object.keys(results.data[0]) : []);
+    const missing = required.filter((f) => !fields.includes(f));
+    if (missing.length > 0) {
+      throw new Error(`Invalid CSV schema. Missing columns: ${missing.join(", ")}`);
+    }
   }
 
   // Initialize and load default demo data
@@ -200,6 +241,14 @@ export class TranscriptState {
       header: true,
       skipEmptyLines: true,
       complete: (/** @type {any} */ results) => {
+        try {
+          this._validateCsv(results);
+        } catch (e) {
+          this.errorMsg = e instanceof Error ? e.message : String(e);
+          this.isLoading = false;
+          return;
+        }
+
         this.words = results.data.map((/** @type {any} */ w) => ({
           ...w,
           id: Math.random().toString(36).substring(2, 10),
@@ -256,6 +305,14 @@ export class TranscriptState {
         header: true,
         skipEmptyLines: true,
         complete: (/** @type {any} */ results) => {
+          try {
+            this._validateCsv(results);
+          } catch (e) {
+            this.errorMsg = e instanceof Error ? e.message : String(e);
+            this.isLoading = false;
+            return;
+          }
+
           this.words = results.data.map((/** @type {any} */ w) => ({
             ...w,
             id: Math.random().toString(36).substring(2, 10),
@@ -299,8 +356,7 @@ export class TranscriptState {
       }),
     );
 
-    const isTauri = typeof window !== "undefined" && /** @type {any} */ (window).__TAURI_INTERNALS__;
-    if (isTauri && this.currentFilePath) {
+    if (isTauri() && this.currentFilePath) {
       try {
         const { writeTextFile } = await import("@tauri-apps/plugin-fs");
         await writeTextFile(this.currentFilePath, csvStr);
@@ -318,8 +374,7 @@ export class TranscriptState {
    * @param {string} csvStr
    */
   async saveCsvAs(csvStr) {
-    const isTauri = typeof window !== "undefined" && /** @type {any} */ (window).__TAURI_INTERNALS__;
-    if (isTauri) {
+    if (isTauri()) {
       try {
         const { save } = await import("@tauri-apps/plugin-dialog");
         const { writeTextFile } = await import("@tauri-apps/plugin-fs");
@@ -459,59 +514,63 @@ export class TranscriptState {
     this.audio.load();
   }
 
-  // Optimized History snapshot using fast shallow object copying
+  // Optimized History snapshot using fast-json-patch
   pushState() {
-    const snapshot = this.words.map((w) => ({ ...w }));
-    if (this.currentHistoryIndex >= 0 && this.currentHistoryIndex < this.history.length) {
-      const lastState = this.history[this.currentHistoryIndex];
-      if (this._isEqual(lastState, snapshot)) {
-        return; // No actual changes, skip pushing
-      }
+    const currentSnapshot = this.words.map((w) => ({ ...w }));
+
+    if (this.currentHistoryIndex === -1) {
+      this.history = [{ full: currentSnapshot }];
+      this.currentHistoryIndex = 0;
+      return;
+    }
+
+    const lastState = this._getStateAt(this.currentHistoryIndex);
+    const patch = compare(lastState, currentSnapshot);
+
+    if (patch.length === 0) {
+      return; // No actual changes, skip pushing
     }
 
     if (this.currentHistoryIndex < this.history.length - 1) {
       this.history = this.history.slice(0, this.currentHistoryIndex + 1);
     }
 
-    this.history.push(snapshot);
+    this.history.push({ patch });
 
     if (this.history.length > this.MAX_HISTORY) {
+      const baseState = this.history[0].full;
+      const firstPatch = this.history[1].patch;
+      const newBaseState = applyPatch(baseState.map(w => ({ ...w })), firstPatch).newDocument;
       this.history.shift();
+      this.history[0] = { full: newBaseState };
     } else {
       this.currentHistoryIndex++;
     }
   }
 
-  /**
-   * @param {any[]} a
-   * @param {any[]} b
-   */
-  _isEqual(a, b) {
-    if (a.length !== b.length) return false;
-    for (let i = 0; i < a.length; i++) {
-      if (
-        a[i].word !== b[i].word ||
-        a[i].speaker !== b[i].speaker ||
-        a[i].start !== b[i].start ||
-        a[i].end !== b[i].end
-      ) {
-        return false;
+  _getStateAt(index) {
+    if (!this.history[0] || !this.history[0].full) return [];
+    
+    let state = this.history[0].full.map((w) => ({ ...w }));
+    for (let i = 1; i <= index; i++) {
+      if (this.history[i].patch) {
+        state = applyPatch(state, this.history[i].patch).newDocument;
       }
     }
-    return true;
+    return state;
   }
 
   undo() {
     if (this.currentHistoryIndex > 0) {
       this.currentHistoryIndex--;
-      this.words = this.history[this.currentHistoryIndex].map((/** @type {any} */ w) => ({ ...w }));
+      this.words = this._getStateAt(this.currentHistoryIndex);
     }
   }
 
   redo() {
     if (this.currentHistoryIndex < this.history.length - 1) {
       this.currentHistoryIndex++;
-      this.words = this.history[this.currentHistoryIndex].map((/** @type {any} */ w) => ({ ...w }));
+      this.words = this._getStateAt(this.currentHistoryIndex);
     }
   }
 
@@ -561,6 +620,68 @@ export class TranscriptState {
     this.words = this.words;
     this.assignSpeakerColors();
     this.pushState();
+  }
+
+  // Advanced Segment Editing
+  /**
+   * @param {number} index
+   */
+  splitWord(index) {
+    if (index < 0 || index >= this.words.length) return;
+    const w = this.words[index];
+    const text = w.word;
+    if (text.length < 2) return;
+    
+    const mid = Math.floor(text.length / 2);
+    const part1 = text.substring(0, mid);
+    const part2 = text.substring(mid);
+    
+    const start = parseFloat(w.start);
+    const end = parseFloat(w.end);
+    const midTime = start + (end - start) / 2;
+
+    const w1 = { ...w, word: part1, end: midTime.toFixed(3), id: Math.random().toString(36).substring(2, 10) };
+    const w2 = { ...w, word: part2, start: midTime.toFixed(3), id: Math.random().toString(36).substring(2, 10) };
+
+    this.words.splice(index, 1, w1, w2);
+    this.pushState();
+  }
+
+  /**
+   * @param {number} index
+   */
+  mergeWord(index) {
+    if (index < 0 || index >= this.words.length - 1) return;
+    const w1 = this.words[index];
+    const w2 = this.words[index + 1];
+
+    if (w1.speaker !== w2.speaker) return;
+
+    w1.word = w1.word + w2.word;
+    w1.end = w2.end;
+    this.words.splice(index + 1, 1);
+    this.pushState();
+  }
+
+  /**
+   * @param {number} index
+   * @param {string} start
+   * @param {string} end
+   */
+  updateTimestamp(index, start, end) {
+    if (index < 0 || index >= this.words.length) return;
+    this.words[index].start = start;
+    this.words[index].end = end;
+    this.pushState();
+  }
+
+  toggleDarkMode() {
+    this.isDarkMode = !this.isDarkMode;
+    if (this.isDarkMode) {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+    }
   }
 
   // Global Search and Replace
@@ -634,8 +755,7 @@ export class TranscriptState {
    * @param {string} mimeType
    */
   async _downloadSubFile(content, filename, mimeType) {
-    const isTauri = typeof window !== "undefined" && /** @type {any} */ (window).__TAURI_INTERNALS__;
-    if (isTauri) {
+    if (isTauri()) {
       try {
         const { save } = await import("@tauri-apps/plugin-dialog");
         const { writeTextFile } = await import("@tauri-apps/plugin-fs");

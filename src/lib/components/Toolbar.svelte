@@ -9,6 +9,8 @@
     Redo,
     Music,
     Search,
+    Sun,
+    Moon
   } from "@lucide/svelte";
 
   const transcriptState = getContext("TRANSCRIPT_STATE");
@@ -189,6 +191,18 @@
         class="icon-btn"
       >
         <ZoomIn size={20} />
+      </button>
+      <div class="divider"></div>
+      <button
+        onclick={() => transcriptState.toggleDarkMode()}
+        title="Toggle Theme"
+        class="icon-btn"
+      >
+        {#if transcriptState.isDarkMode}
+          <Sun size={20} />
+        {:else}
+          <Moon size={20} />
+        {/if}
       </button>
     </div>
   </header>

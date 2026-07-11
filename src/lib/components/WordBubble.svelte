@@ -12,10 +12,25 @@
   // Register this word span's DOM node in the state reference map
   $effect(() => {
     transcriptState.wordElements[index] = element;
+    
+    // Caret focus fix: sync textContent only if it actually differs from DOM
+    if (element && transcriptState.words[index]) {
+      const stateWord = transcriptState.words[index].word;
+      if (element.textContent !== stateWord) {
+        element.textContent = stateWord;
+      }
+    }
+
     return () => {
       delete transcriptState.wordElements[index];
     };
   });
+
+  function handleInput(e) {
+    if (transcriptState.words[index]) {
+      transcriptState.words[index].word = e.target.textContent;
+    }
+  }
 
   /**
    * @param {any} seconds
@@ -32,6 +47,22 @@
    * @param {any} e
    */
   async function handleKeydown(e) {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      transcriptState.togglePlay();
+      return;
+    }
+    if (e.key === "ArrowLeft" && e.ctrlKey) {
+      e.preventDefault();
+      transcriptState.seekAudioTo(transcriptState.audioCurrentTime - 3);
+      return;
+    }
+    if (e.key === "ArrowRight" && e.ctrlKey) {
+      e.preventDefault();
+      transcriptState.seekAudioTo(transcriptState.audioCurrentTime + 3);
+      return;
+    }
+
     const selection = window.getSelection();
     if (!selection || !selection.isCollapsed) return;
 
@@ -174,8 +205,9 @@
   id="word-{index}"
   class="word"
   class:active={transcriptState.activeWordIndex === index}
+  class:low-confidence={wordData.score !== undefined && wordData.score < 0.8}
   contenteditable="true"
-  bind:textContent={transcriptState.words[index].word}
+  oninput={handleInput}
   onfocus={() => {
     transcriptState.activeWordIndex = index;
     if (transcriptState.words[index] && transcriptState.words[index].start) {
@@ -208,5 +240,10 @@
   .word.active {
     background-color: rgba(74, 144, 226, 0.15);
     color: var(--accent-color);
+  }
+
+  .word.low-confidence {
+    text-decoration: underline dotted #f87171;
+    text-underline-offset: 4px;
   }
 </style>

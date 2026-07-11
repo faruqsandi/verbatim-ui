@@ -1,20 +1,36 @@
 <script>
   import { getContext } from "svelte";
-  import { Play, Pause, Square } from "@lucide/svelte";
+  import { Play, Pause, Square, Volume2, VolumeX } from "@lucide/svelte";
   import WaveSurfer from "wavesurfer.js";
+  import TimelinePlugin from "wavesurfer.js/dist/plugins/timeline.esm.js";
 
   const transcriptState = getContext("TRANSCRIPT_STATE");
 
   /** @type {HTMLDivElement | undefined} */
   let waveformEl = $state();
+  /** @type {HTMLDivElement | undefined} */
+  let timelineEl = $state();
   /** @type {any} */
   let wavesurfer = null;
+
+  let zoomLevel = $state(10);
+  let volume = $state(1);
+  let isMuted = $derived(volume === 0);
+
+  // Sync volume to audio element
+  $effect(() => {
+    if (transcriptState.audio) {
+      transcriptState.audio.volume = volume;
+    }
+  });
 
   // Reactively initialize and bind wavesurfer to the HTML5 Audio element
   $effect(() => {
     if (waveformEl && transcriptState.audio && transcriptState.audioLoaded) {
       if (wavesurfer) {
         wavesurfer.destroy();
+        waveformEl.innerHTML = "";
+        if (timelineEl) timelineEl.innerHTML = "";
       }
 
       try {
@@ -29,7 +45,26 @@
           barWidth: 2,
           barGap: 1,
           barRadius: 2,
+          minPxPerSec: zoomLevel,
+          plugins: timelineEl ? [
+            TimelinePlugin.create({
+              container: timelineEl,
+              height: 16,
+              timeInterval: 5,
+              primaryLabelInterval: 10,
+              style: {
+                fontSize: '10px',
+                color: '#64748b'
+              }
+            })
+          ] : []
         });
+
+        // Make interactive
+        wavesurfer.on('click', () => {
+          transcriptState.audioCurrentTime = wavesurfer.getCurrentTime();
+        });
+
       } catch (err) {
         console.error("WaveSurfer creation error:", err);
       }
@@ -38,10 +73,19 @@
         if (wavesurfer) {
           wavesurfer.destroy();
           wavesurfer = null;
+          if (waveformEl) waveformEl.innerHTML = "";
+          if (timelineEl) timelineEl.innerHTML = "";
         }
       };
     }
   });
+
+  function handleZoom(e) {
+    zoomLevel = Number(e.target.value);
+    if (wavesurfer) {
+      wavesurfer.zoom(zoomLevel);
+    }
+  }
 
   /**
    * @param {any} seconds
@@ -95,6 +139,26 @@
         <option value={1.5}>1.5x</option>
         <option value={2.0}>2.0x</option>
       </select>
+
+      <div class="divider"></div>
+
+      <div class="volume-control">
+        <button class="audio-btn" onclick={() => volume = isMuted ? 1 : 0} title="Mute/Unmute">
+          {#if isMuted}
+            <VolumeX size={18} />
+          {:else}
+            <Volume2 size={18} />
+          {/if}
+        </button>
+        <input type="range" min="0" max="1" step="0.05" bind:value={volume} class="volume-slider" title="Volume" />
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="zoom-control">
+        <span style="font-size: 12px; color: #64748b;">Zoom</span>
+        <input type="range" min="10" max="500" bind:value={zoomLevel} oninput={handleZoom} class="zoom-slider" title="Zoom Waveform" />
+      </div>
     </div>
 
     <div class="audio-seeker-container">
@@ -102,6 +166,7 @@
       
       <div class="waveform-container">
         <div bind:this={waveformEl}></div>
+        <div bind:this={timelineEl} class="timeline-el"></div>
       </div>
       
       <span class="audio-time">{formatTime(transcriptState.audioDuration)}</span>
@@ -197,5 +262,24 @@
     padding: 4px 8px;
     border: 1px solid rgba(0, 0, 0, 0.05);
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .timeline-el {
+    width: 100%;
+    opacity: 0.8;
+  }
+
+  .volume-control, .zoom-control {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+
+  .volume-slider, .zoom-slider {
+    width: 60px;
+    cursor: pointer;
   }
 </style>
