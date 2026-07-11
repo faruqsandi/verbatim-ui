@@ -4,10 +4,11 @@ This TODO list outlines actionable tasks to address the architectural issues, te
 
 ## 📋 Meta Tasks (Current Sprint)
 - [x] **Codebase Analysis**: Perform complete walkthrough and compile analysis report.
-- [/] **Task List Expansion**: Expand new suggestions into actionable tasks in `todo.md`.
-- [ ] **Architecture Decision Records (ADRs)**: Document proposed changes (Undo/Redo optimization, Caret jumping, etc.) in `docs/adr/`.
-- [ ] **System Architecture Update**: Update `docs/system/architecture.md` to reflect Tauri v2 plugins and Svelte 5 state management.
-- [ ] **Context-Based Commits**: Create separate git commits for each change context.
+- [x] **Task List Expansion**: Expand new suggestions into actionable tasks in `todo.md`.
+- [x] **Architecture Decision Records (ADRs)**: Document proposed changes (Undo/Redo optimization, Caret jumping, etc.) in `docs/adr/`.
+- [x] **System Architecture Update**: Update `docs/system/architecture.md` to reflect Tauri v2 plugins and Svelte 5 state management.
+- [x] **Context-Based Commits**: Create separate git commits for each change context.
+
 
 ---
 
