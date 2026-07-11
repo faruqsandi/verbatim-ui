@@ -197,6 +197,38 @@
           {/if}
         </div>
       </div>
+      
+      <div class="menu-item">
+        <strong>Split segment:</strong>
+        <select
+          onchange={(e) => {
+            const target = /** @type {HTMLSelectElement} */ (e.target);
+            if (target && target.value && transcriptState.activeWordIndex !== null) {
+              if (target.value === "NEW_SPEAKER") {
+                let newSp = prompt("Enter new speaker name:");
+                if (newSp) {
+                  newSp = newSp.trim();
+                  if (newSp) {
+                    transcriptState.splitSegmentAt(transcriptState.activeWordIndex, newSp);
+                  }
+                }
+              } else {
+                transcriptState.splitSegmentAt(transcriptState.activeWordIndex, target.value);
+              }
+              transcriptState.contextMenu.show = false;
+            }
+          }}
+          value=""
+          class="speaker-select"
+        >
+          <option value="" disabled>Select speaker...</option>
+          {#each transcriptState.speakers as sp}
+            <option value={sp}>{sp}</option>
+          {/each}
+          <option value="NEW_SPEAKER">+ New Speaker...</option>
+        </select>
+      </div>
+
       <div class="menu-item">
         <strong>Time:</strong>
         {formatTime(transcriptState.contextMenu.word.start)} - {formatTime(
@@ -273,7 +305,7 @@
     border-radius: 8px;
     padding: 0.5rem;
     z-index: 1000;
-    min-width: 160px;
+    min-width: 180px;
     font-family: var(--font-ui);
   }
 
@@ -289,6 +321,24 @@
   .menu-item strong {
     font-weight: 600;
     color: var(--ui-color);
+  }
+
+  .speaker-select {
+    font-family: inherit;
+    font-size: 0.85rem;
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    border: 1px solid rgba(0, 0, 0, 0.2);
+    background: white;
+    color: var(--text-color);
+    outline: none;
+    cursor: pointer;
+    flex: 1;
+    max-width: 120px;
+  }
+
+  .speaker-select:focus {
+    border-color: var(--ui-color);
   }
 
   .custom-dropdown-wrapper {

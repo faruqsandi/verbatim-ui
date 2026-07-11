@@ -18,7 +18,8 @@
     "@tauri-apps/plugin-dialog": "^2.7.1",
     "@tauri-apps/plugin-fs": "^2.5.1",
     "@tauri-apps/plugin-opener": "^2",
-    "papaparse": "^5.5.3"
+    "papaparse": "^5.5.3",
+    "wavesurfer.js": "^7.12.10"
   },
   "devDependencies": {
     "@sveltejs/adapter-static": "^3.0.6",

@@ -11,10 +11,18 @@
       <ul class="legend-list">
         {#each transcriptState.speakers as sp (sp)}
           <li class="legend-item">
-            <span
-              class="color-dot"
-              style="background-color: {transcriptState.speakerColors[sp]}"
-            ></span>
+            <input
+              type="color"
+              class="color-picker-dot"
+              value={transcriptState.speakerColors[sp] || "#cccccc"}
+              oninput={(e) => {
+                const target = /** @type {HTMLInputElement} */ (e.target);
+                if (target) {
+                  transcriptState.speakerColors[sp] = target.value;
+                  transcriptState.speakerColors = { ...transcriptState.speakerColors }; // trigger reactivity
+                }
+              }}
+            />
             <input
               class="speaker-name-input"
               value={sp}
@@ -91,11 +99,27 @@
     color: var(--text-color);
   }
 
-  .color-dot {
-    width: 10px;
-    height: 10px;
+  .color-picker-dot {
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    border: none;
     border-radius: 50%;
+    cursor: pointer;
+    background: none;
+    padding: 0;
     flex-shrink: 0;
+  }
+
+  .color-picker-dot::-webkit-color-swatch-wrapper {
+    padding: 0;
+  }
+
+  .color-picker-dot::-webkit-color-swatch {
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    border-radius: 50%;
   }
 
   .speaker-name-input {

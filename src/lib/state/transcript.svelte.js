@@ -1,6 +1,23 @@
 import { tick } from "svelte";
 import Papa from "papaparse";
 
+/**
+ * @param {any} seconds
+ * @param {boolean} [isSrt]
+ */
+function formatTimeSub(seconds, isSrt = false) {
+  const s = parseFloat(seconds) || 0;
+  const hrs = Math.floor(s / 3600);
+  const mins = Math.floor((s % 3600) / 60);
+  const secs = Math.floor(s % 60);
+  const ms = Math.floor((s % 1) * 1000);
+
+  const pad = (/** @type {number} */ num, /** @type {number} */ len = 2) => String(num).padStart(len, "0");
+  const msDelim = isSrt ? "," : ".";
+
+  return `${pad(hrs)}:${pad(mins)}:${pad(secs)}${msDelim}${pad(ms, 3)}`;
+}
+
 export class TranscriptState {
   // Reactive state using Svelte 5 runes
   /** @type {any[]} */
@@ -20,6 +37,7 @@ export class TranscriptState {
   audioDuration = $state(0);
   audioCurrentTime = $state(0);
   audioPaused = $state(true);
+  playbackRate = $state(1.0);
 
   // Speaker color map
   /** @type {Record<string, string>} */
@@ -116,6 +134,10 @@ export class TranscriptState {
 
     this.audio.onseeked = () => {
       this.audioCurrentTime = this.audio.currentTime;
+    };
+
+    this.audio.onratechange = () => {
+      this.playbackRate = this.audio.playbackRate;
     };
   }
 
@@ -419,6 +441,14 @@ export class TranscriptState {
   }
 
   /**
+   * @param {number} rate
+   */
+  setPlaybackRate(rate) {
+    this.playbackRate = rate;
+    this.audio.playbackRate = rate;
+  }
+
+  /**
    * @param {any} file
    */
   handleAudioUpload(file) {
@@ -509,6 +539,131 @@ export class TranscriptState {
       }
       this.pushState();
     }
+  }
+
+  // Segment Splitter
+  /**
+   * @param {number} wordIndex
+   * @param {string} newSpeakerName
+   */
+  splitSegmentAt(wordIndex, newSpeakerName) {
+    if (wordIndex < 0 || wordIndex >= this.words.length) return;
+    
+    const currentSpeaker = this.words[wordIndex].speaker;
+    for (let i = wordIndex; i < this.words.length; i++) {
+      if (this.words[i].speaker === currentSpeaker) {
+        this.words[i].speaker = newSpeakerName;
+      } else {
+        break; // Stop at next speaker block
+      }
+    }
+
+    this.words = this.words;
+    this.assignSpeakerColors();
+    this.pushState();
+  }
+
+  // Global Search and Replace
+  /**
+   * @param {string} findText
+   * @param {string} replaceText
+   * @param {boolean} [caseSensitive]
+   */
+  findAndReplace(findText, replaceText, caseSensitive = false) {
+    if (!findText) return 0;
+    let count = 0;
+    const search = caseSensitive ? findText : findText.toLowerCase();
+
+    this.words = this.words.map((w) => {
+      const wordVal = w.word || "";
+      const matchVal = caseSensitive ? wordVal : wordVal.toLowerCase();
+
+      if (matchVal.includes(search)) {
+        count++;
+        let newWord;
+        if (caseSensitive) {
+          newWord = wordVal.split(findText).join(replaceText);
+        } else {
+          const regex = new RegExp(findText.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
+          newWord = wordVal.replace(regex, replaceText);
+        }
+        return { ...w, word: newWord };
+      }
+      return w;
+    });
+
+    if (count > 0) {
+      this.pushState();
+    }
+    return count;
+  }
+
+  // Subtitle Exporters
+  exportToSrt() {
+    const lines = this.sentenceGroups.map((/** @type {any} */ group, /** @type {number} */ idx) => {
+      const start = formatTimeSub(group.words[0].word.start, true);
+      const end = formatTimeSub(group.words[group.words.length - 1].word.end, true);
+      const text = group.words.map((/** @type {any} */ w) => w.word.word).join(" ");
+      return `${idx + 1}\n${start} --> ${end}\n${group.speaker || "Unknown"}: ${text}\n`;
+    }).join("\n");
+    this._downloadSubFile(lines, "transcript.srt", "text/srt");
+  }
+
+  exportToVtt() {
+    const header = "WEBVTT\n\n";
+    const lines = this.sentenceGroups.map((/** @type {any} */ group, /** @type {number} */ idx) => {
+      const start = formatTimeSub(group.words[0].word.start, false);
+      const end = formatTimeSub(group.words[group.words.length - 1].word.end, false);
+      const text = group.words.map((/** @type {any} */ w) => w.word.word).join(" ");
+      return `${idx + 1}\n${start} --> ${end}\n<v ${group.speaker || "Unknown"}>${text}\n`;
+    }).join("\n");
+    this._downloadSubFile(header + lines, "transcript.vtt", "text/vtt");
+  }
+
+  exportToTxt() {
+    const lines = this.sentenceGroups.map((/** @type {any} */ group) => {
+      const text = group.words.map((/** @type {any} */ w) => w.word.word).join(" ");
+      return `${group.speaker || "Unknown"}: ${text}`;
+    }).join("\n\n");
+    this._downloadSubFile(lines, "transcript.txt", "text/plain");
+  }
+
+  /**
+   * @param {string} content
+   * @param {string} filename
+   * @param {string} mimeType
+   */
+  async _downloadSubFile(content, filename, mimeType) {
+    const isTauri = typeof window !== "undefined" && /** @type {any} */ (window).__TAURI_INTERNALS__;
+    if (isTauri) {
+      try {
+        const { save } = await import("@tauri-apps/plugin-dialog");
+        const { writeTextFile } = await import("@tauri-apps/plugin-fs");
+        
+        const path = await save({
+          filters: [{ name: filename.split(".")[1].toUpperCase() + " File", extensions: [filename.split(".")[1]] }],
+          defaultPath: filename,
+        });
+
+        if (path) {
+          await writeTextFile(path, content);
+        }
+        return;
+      } catch (err) {
+        console.error("Tauri save subtitle error:", err);
+      }
+    }
+
+    // Web browser fallback
+    const blob = new Blob([content], { type: `${mimeType};charset=utf-8;` });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", filename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   }
 
   // Clean up

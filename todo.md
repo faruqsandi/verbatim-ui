@@ -38,16 +38,16 @@ This TODO list outlines actionable tasks to address the architectural issues, te
   - [x] Enable dragging audio and CSV files directly onto the app window to load them.
 
 ## 🎨 4. Functional & UI Features
-- [ ] **Audio Waveform Visualization**:
-  - [ ] Integrate a library like `wavesurfer.js` or write a custom light canvas wave reader to visualize syllables, word segments, and pauses.
-- [ ] **Playback Speed Control**:
-  - [ ] Add a playback rate dropdown/slider (0.5x, 0.75x, 1x, 1.25x, 1.5x, 2.0x).
-- [ ] **Subtitle Exporters**:
-  - [ ] Implement SRT exporter module.
-  - [ ] Implement WebVTT exporter module.
-  - [ ] Implement raw TXT script exporter module.
-- [ ] **Search and Replace**:
-  - [ ] Implement a find-and-replace drawer to batch update recurring transcription errors.
-- [ ] **Diarization Enhancements**:
-  - [ ] Add a visual color picker to the speaker legend sidebar to customize speaker colors.
-  - [ ] Add ability to insert a new speaker block mid-paragraph.
+- [x] **Audio Waveform Visualization**:
+  - [x] Integrate a library like `wavesurfer.js` or write a custom light canvas wave reader to visualize syllables, word segments, and pauses.
+- [x] **Playback Speed Control**:
+  - [x] Add a playback rate dropdown/slider (0.5x, 0.75x, 1x, 1.25x, 1.5x, 2.0x).
+- [x] **Subtitle Exporters**:
+  - [x] Implement SRT exporter module.
+  - [x] Implement WebVTT exporter module.
+  - [x] Implement raw TXT script exporter module.
+- [x] **Search and Replace**:
+  - [x] Implement a find-and-replace drawer to batch update recurring transcription errors.
+- [x] **Diarization Enhancements**:
+  - [x] Add a visual color picker to the speaker legend sidebar to customize speaker colors.
+  - [x] Add ability to insert a new speaker block mid-paragraph.
