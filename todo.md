@@ -15,6 +15,8 @@ This TODO list outlines actionable tasks to address the architectural issues, te
 ## 🧱 1. Code Architecture & Modularization
 - [ ] **Svelte 5 Layout Modernization**:
   - [ ] Refactor [src/routes/+layout.svelte](file:///home/bit/Playground/verbatim-ui/src/routes/+layout.svelte) to replace the deprecated `<slot />` with the new Svelte 5 `{@render children()}` syntax.
+- [ ] **Update Tauri App Defaults**:
+  - [ ] Change `productName` and `identifier` in `tauri.conf.json` from their generic defaults (`tauri-app`).
 - [ ] **Remove Dead Rust Code**:
   - [ ] Delete the unused `load_csv_data` Rust command in [src-tauri/src/lib.rs](file:///home/bit/Playground/verbatim-ui/src-tauri/src/lib.rs).
   - [ ] Remove the command registration in the native handler (`.invoke_handler(...)`).
