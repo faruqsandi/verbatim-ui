@@ -182,8 +182,18 @@ export class TranscriptState {
     }
   }
 
-  // Initialize and load default demo data
+  // Initialize to empty state
   async initDemo() {
+    this.isLoading = false;
+    this.errorMsg = "";
+    this.currentFilePath = null;
+    this.words = [];
+    this.history = [];
+    this.currentHistoryIndex = -1;
+  }
+
+  // Explicitly load demo data when requested
+  async loadDemoData() {
     this.isLoading = true;
     this.errorMsg = "";
     this.currentFilePath = null;
@@ -193,6 +203,9 @@ export class TranscriptState {
 
     try {
       const response = await fetch("/artikulasi.csv");
+      if (!response.ok) {
+        throw new Error("Demo data not found on server.");
+      }
       const csvStr = await response.text();
       Papa.parse(csvStr, {
         header: true,
@@ -688,26 +701,36 @@ export class TranscriptState {
   /**
    * @param {string} findText
    * @param {string} replaceText
-   * @param {boolean} [caseSensitive]
+   * @param {{caseSensitive?: boolean, useRegex?: boolean, wholeWord?: boolean}} options
    */
-  findAndReplace(findText, replaceText, caseSensitive = false) {
+  findAndReplace(findText, replaceText, options = {}) {
+    const { caseSensitive = false, useRegex = false, wholeWord = false } = options;
     if (!findText) return 0;
+    
+    let searchRegex;
+    try {
+      let pattern = useRegex ? findText : findText.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      if (wholeWord) {
+        pattern = `\\b${pattern}\\b`;
+      }
+      const flags = caseSensitive ? "g" : "gi";
+      searchRegex = new RegExp(pattern, flags);
+    } catch (e) {
+      console.error("Invalid regex pattern", e);
+      return 0;
+    }
+
     let count = 0;
-    const search = caseSensitive ? findText : findText.toLowerCase();
 
     this.words = this.words.map((w) => {
       const wordVal = w.word || "";
-      const matchVal = caseSensitive ? wordVal : wordVal.toLowerCase();
 
-      if (matchVal.includes(search)) {
+      // Reset regex index before test
+      searchRegex.lastIndex = 0;
+      if (searchRegex.test(wordVal)) {
         count++;
-        let newWord;
-        if (caseSensitive) {
-          newWord = wordVal.split(findText).join(replaceText);
-        } else {
-          const regex = new RegExp(findText.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
-          newWord = wordVal.replace(regex, replaceText);
-        }
+        searchRegex.lastIndex = 0;
+        const newWord = wordVal.replace(searchRegex, replaceText);
         return { ...w, word: newWord };
       }
       return w;

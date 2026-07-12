@@ -3,6 +3,7 @@
   import { Play, Pause, Square, Volume2, VolumeX } from "@lucide/svelte";
   import WaveSurfer from "wavesurfer.js";
   import TimelinePlugin from "wavesurfer.js/dist/plugins/timeline.esm.js";
+  import MinimapPlugin from "wavesurfer.js/dist/plugins/minimap.esm.js";
 
   const transcriptState = getContext("TRANSCRIPT_STATE");
 
@@ -46,8 +47,8 @@
           barGap: 1,
           barRadius: 2,
           minPxPerSec: zoomLevel,
-          plugins: timelineEl ? [
-            TimelinePlugin.create({
+          plugins: [
+            timelineEl ? TimelinePlugin.create({
               container: timelineEl,
               height: 16,
               timeInterval: 5,
@@ -56,8 +57,16 @@
                 fontSize: '10px',
                 color: '#64748b'
               }
+            }) : null,
+            MinimapPlugin.create({
+              height: 20,
+              waveColor: '#e2e8f0',
+              progressColor: '#94a3b8',
+              cursorWidth: 1,
+              cursorColor: '#2563eb',
+              overlayColor: 'rgba(59, 130, 246, 0.1)',
             })
-          ] : []
+          ].filter(Boolean)
         });
 
         // Make interactive

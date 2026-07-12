@@ -25,6 +25,8 @@
   let findQuery = $state("");
   let replaceQuery = $state("");
   let caseSensitive = $state(false);
+  let useRegex = $state(false);
+  let wholeWord = $state(false);
   let replaceStatus = $state("");
 
   function triggerFileInput() {
@@ -98,7 +100,7 @@
       replaceStatus = "Enter query";
       return;
     }
-    const count = transcriptState.findAndReplace(findQuery, replaceQuery, caseSensitive);
+    const count = transcriptState.findAndReplace(findQuery, replaceQuery, { caseSensitive, useRegex, wholeWord });
     replaceStatus = `Replaced ${count} items`;
   }
 
@@ -223,6 +225,12 @@
       />
       <label class="search-label">
         <input type="checkbox" bind:checked={caseSensitive} /> Match case
+      </label>
+      <label class="search-label">
+        <input type="checkbox" bind:checked={wholeWord} /> Whole word
+      </label>
+      <label class="search-label">
+        <input type="checkbox" bind:checked={useRegex} /> Regex
       </label>
       <button onclick={executeReplace} class="replace-btn">Replace All</button>
       {#if replaceStatus}

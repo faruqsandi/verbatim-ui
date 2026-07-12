@@ -229,11 +229,46 @@
         </select>
       </div>
 
-      <div class="menu-item">
+      <div class="menu-item custom-dropdown-wrapper">
         <strong>Time:</strong>
-        {formatTime(transcriptState.contextMenu.word.start)} - {formatTime(
-          transcriptState.contextMenu.word.end,
-        )}
+        <div class="time-edit-row">
+          <input 
+            type="text" 
+            class="time-input" 
+            bind:value={transcriptState.contextMenu.word.start}
+          />
+          - 
+          <input 
+            type="text" 
+            class="time-input" 
+            bind:value={transcriptState.contextMenu.word.end}
+          />
+          <button class="save-time-btn" onclick={() => {
+            if (transcriptState.activeWordIndex !== null) {
+              transcriptState.updateTimestamp(
+                transcriptState.activeWordIndex, 
+                transcriptState.contextMenu.word.start, 
+                transcriptState.contextMenu.word.end
+              );
+            }
+            transcriptState.contextMenu.show = false;
+          }}>Save</button>
+        </div>
+      </div>
+
+      <div class="menu-item segment-actions">
+        <button class="segment-btn" onclick={() => {
+          if (transcriptState.activeWordIndex !== null) {
+            transcriptState.splitWord(transcriptState.activeWordIndex);
+          }
+          transcriptState.contextMenu.show = false;
+        }}>Split Word</button>
+        <button class="segment-btn" onclick={() => {
+          if (transcriptState.activeWordIndex !== null) {
+            transcriptState.mergeWord(transcriptState.activeWordIndex);
+          }
+          transcriptState.contextMenu.show = false;
+        }}>Merge with Next</button>
       </div>
     </div>
   {/if}
@@ -415,5 +450,63 @@
     height: 10px;
     border-radius: 50%;
     flex-shrink: 0;
+  }
+
+  .time-edit-row {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+
+  .time-input {
+    width: 50px;
+    font-family: inherit;
+    font-size: 0.8rem;
+    padding: 0.2rem;
+    border: 1px solid rgba(0,0,0,0.2);
+    border-radius: 4px;
+    text-align: center;
+    color: var(--text-color);
+    background: white;
+  }
+
+  .save-time-btn {
+    background: var(--accent-color);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 0.2rem 0.5rem;
+    font-size: 0.75rem;
+    cursor: pointer;
+    margin-left: 0.25rem;
+  }
+
+  .save-time-btn:hover {
+    opacity: 0.9;
+  }
+
+  .segment-actions {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: center;
+    border-top: 1px solid rgba(0,0,0,0.05);
+    padding-top: 0.75rem;
+    margin-top: 0.25rem;
+  }
+
+  .segment-btn {
+    background: rgba(0,0,0,0.05);
+    border: 1px solid rgba(0,0,0,0.1);
+    border-radius: 4px;
+    padding: 0.3rem 0.6rem;
+    font-family: inherit;
+    font-size: 0.8rem;
+    color: var(--text-color);
+    cursor: pointer;
+    flex: 1;
+  }
+
+  .segment-btn:hover {
+    background: rgba(0,0,0,0.1);
   }
 </style>

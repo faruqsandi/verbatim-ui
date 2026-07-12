@@ -75,6 +75,16 @@
     <div class="loading">Loading content...</div>
   {:else if transcriptState.errorMsg}
     <div class="error">{transcriptState.errorMsg}</div>
+  {:else if transcriptState.words.length === 0}
+    <div class="empty-state">
+      <h2>Welcome to Verbatim UI</h2>
+      <p>Load a CSV transcript and its corresponding audio file to begin editing.</p>
+      <div class="empty-actions">
+        <button onclick={() => transcriptState.loadDemoData()} class="primary-btn">
+          Load Demo Data
+        </button>
+      </div>
+    </div>
   {:else}
     <div class="chat-container">
       {#each transcriptState.sentenceGroups as group (group.id)}
@@ -186,5 +196,40 @@
 
   .error {
     color: #e74c3c;
+  }
+
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    margin-top: 15vh;
+    font-family: var(--font-ui);
+    color: var(--ui-color);
+  }
+
+  .empty-state h2 {
+    color: var(--text-color);
+    margin-bottom: 0.5rem;
+  }
+
+  .empty-actions {
+    margin-top: 2rem;
+  }
+
+  .primary-btn {
+    background-color: var(--accent-color);
+    color: white;
+    border: none;
+    padding: 0.75rem 1.5rem;
+    border-radius: 6px;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: opacity 0.2s;
+  }
+
+  .primary-btn:hover {
+    opacity: 0.9;
   }
 </style>
