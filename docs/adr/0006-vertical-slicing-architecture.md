@@ -12,7 +12,7 @@ We will migrate the architecture to **Feature-Driven Architecture (Vertical Slic
 
 1.  **Vertical Slicing**:
     *   Group files by domain feature into `src/lib/features/`.
-    *   Specific feature directories established: `core`, `audio-player`, `transcript-editor`, `data-view`, `speaker-legend`.
+    *   Specific feature directories established: `core`, `audio-player`, `transcript-editor`, `data-view`, `properties-panel`.
 2.  **Domain Stores**:
     *   Break down the `TranscriptState` God Object into focused, domain-specific stores:
         *   `UiStore`: Visual toggles, scaling, panel labels, Context Menu.

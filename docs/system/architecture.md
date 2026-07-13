@@ -44,6 +44,7 @@ All runtime data is managed via feature-specific Svelte 5 context stores and rea
 *   **Runes**: Reactive properties (`words`, `activeWordIndex`, `audioCurrentTime`, etc.) are declared using the `$state` rune, while computed arrays like `sentenceGroups` and `speakers` utilize `$derived`.
 *   **History Stack (`history`)**: The `TranscriptStore` maintains a history stack of the `words` array. Undoing and redoing is handled by swapping active array values back to historical snapshots.
 *   **Virtualized Table View**: Large transcripts can feature thousands of rows. The `TablePanel.svelte` component (`features/data-view`) virtually scrolls the word arrays, rendering only the rows within the viewport buffer (plus padding) to maintain rendering speeds.
+*   **Properties Panel**: The `PropertiesPanel.svelte` component (`features/properties-panel`) provides a dedicated, fixed-width right sidebar for modifying speaker metadata, colors, and future document properties without floating over the text.
 
 ---
 
