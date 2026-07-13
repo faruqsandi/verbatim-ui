@@ -218,6 +218,11 @@
         Data Table
       </label>
       <div class="divider"></div>
+      <label class="toggle-label">
+        <input type="checkbox" bind:checked={uiStore.showPropertiesPanel} />
+        Properties
+      </label>
+      <div class="divider"></div>
       <button onclick={handleLoadCsvClick} title="Load CSV" class="icon-btn">
         <Upload size={20} />
       </button>

@@ -11,7 +11,7 @@
   import AudioPlayer from "$lib/features/audio-player/AudioPlayer.svelte";
   import TranscriptArea from "$lib/features/transcript-editor/TranscriptArea.svelte";
   import ContextMenu from "$lib/features/transcript-editor/ContextMenu.svelte";
-  import LegendPanel from "$lib/features/speaker-legend/LegendPanel.svelte";
+  import PropertiesPanel from "$lib/features/properties-panel/PropertiesPanel.svelte";
   import TablePanel from "$lib/features/data-view/TablePanel.svelte";
 
   // Instantiate the feature stores
@@ -160,8 +160,10 @@
     <!-- Reading/Transcript Area -->
     <TranscriptArea />
 
-    <!-- Legend Sidebar -->
-    <LegendPanel />
+    <!-- Right Sidebar (Properties View) -->
+    {#if uiStore.showPropertiesPanel}
+      <PropertiesPanel />
+    {/if}
   </div>
 
   <!-- Context Menu for Speakers -->

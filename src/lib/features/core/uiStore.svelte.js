@@ -3,6 +3,7 @@ export class UiStore {
   fontScale = $state(1.0);
   isDarkMode = $state(false);
   showPanelLabels = $state(true);
+  showPropertiesPanel = $state(true);
   
   contextMenu = $state({
     show: false,
@@ -29,6 +30,10 @@ export class UiStore {
   
   togglePanelLabels() {
     this.showPanelLabels = !this.showPanelLabels;
+  }
+
+  togglePropertiesPanel() {
+    this.showPropertiesPanel = !this.showPropertiesPanel;
   }
 
   hideContextMenu() {
