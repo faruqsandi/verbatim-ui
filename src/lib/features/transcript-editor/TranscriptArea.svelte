@@ -2,11 +2,10 @@
   import { getContext, tick } from "svelte";
   import WordBubble from "./WordBubble.svelte";
 
-  const transcriptState = getContext("TRANSCRIPT_STATE");
+  const transcriptStore = getContext("TRANSCRIPT_STORE");
+  const audioStore = getContext("AUDIO_STORE");
+  const uiStore = getContext("UI_STORE");
 
-  /**
-   * @param {any} seconds
-   */
   function formatTime(seconds) {
     if (!seconds) return "0:00";
     const s = parseFloat(seconds);
@@ -15,13 +14,12 @@
     return `${m}:${sec.toString().padStart(2, "0")}`;
   }
 
-  // Svelte 5: $effect monitors state changes reactively
   $effect(() => {
-    const time = transcriptState.audioCurrentTime;
-    if (transcriptState.audioLoaded && transcriptState.words.length > 0) {
+    const time = audioStore.audioCurrentTime;
+    if (audioStore.audioLoaded && transcriptStore.words.length > 0) {
       let foundIndex = null;
-      for (let i = 0; i < transcriptState.words.length; i++) {
-        const w = transcriptState.words[i];
+      for (let i = 0; i < transcriptStore.words.length; i++) {
+        const w = transcriptStore.words[i];
         if (
           time >= parseFloat(w.start) &&
           time <= parseFloat(w.end)
@@ -31,14 +29,13 @@
         }
       }
 
-      if (foundIndex !== transcriptState.activeWordIndex) {
-        transcriptState.activeWordIndex = foundIndex;
+      if (foundIndex !== transcriptStore.activeWordIndex) {
+        transcriptStore.activeWordIndex = foundIndex;
         if (foundIndex !== null) {
           tick().then(() => {
-            const wordEl = transcriptState.wordElements[foundIndex];
+            const wordEl = document.querySelector(`[data-index="${foundIndex}"]`);
             if (wordEl) {
               const rect = wordEl.getBoundingClientRect();
-              // Scroll if the element is out of viewport scroll boundaries
               if (rect.top < 150 || rect.bottom > window.innerHeight - 150) {
                 window.scrollBy({
                   top: rect.top - window.innerHeight / 2,
@@ -55,12 +52,12 @@
 
 <svelte:head>
   {@html `<style>
-    ${transcriptState.speakers
+    ${transcriptStore.speakers
       .map(
         (sp, idx) => `
       .speaker-sp-${idx} {
-        text-decoration: ${transcriptState.showUnderlines ? "underline" : "none"};
-        text-decoration-color: ${transcriptState.speakerColors[sp] || "transparent"};
+        text-decoration: ${transcriptStore.showUnderlines ? "underline" : "none"};
+        text-decoration-color: ${transcriptStore.speakerColors[sp] || "transparent"};
         text-decoration-thickness: 1.5px;
         text-underline-offset: 4px;
       }
@@ -71,28 +68,32 @@
 </svelte:head>
 
 <main class="reading-area">
-  {#if transcriptState.isLoading}
+  {#if uiStore.showPanelLabels}
+    <div class="panel-label">TranscriptArea</div>
+  {/if}
+
+  {#if transcriptStore.isLoading}
     <div class="loading">Loading content...</div>
-  {:else if transcriptState.errorMsg}
-    <div class="error">{transcriptState.errorMsg}</div>
-  {:else if transcriptState.words.length === 0}
+  {:else if transcriptStore.errorMsg}
+    <div class="error">{transcriptStore.errorMsg}</div>
+  {:else if transcriptStore.words.length === 0}
     <div class="empty-state">
       <h2>Welcome to Verbatim UI</h2>
       <p>Load a CSV transcript and its corresponding audio file to begin editing.</p>
       <div class="empty-actions">
-        <button onclick={() => transcriptState.loadDemoData()} class="primary-btn">
+        <button onclick={() => transcriptStore.loadDemoData(audioStore)} class="primary-btn">
           Load Demo Data
         </button>
       </div>
     </div>
   {:else}
     <div class="chat-container">
-      {#each transcriptState.sentenceGroups as group (group.id)}
+      {#each transcriptStore.sentenceGroups as group (group.id)}
         <div class="chat-message">
           <div class="message-meta">
             <div
               class="speaker-avatar"
-              style="background-color: {transcriptState.speakerColors[group.speaker] || '#ccc'}"
+              style="background-color: {transcriptStore.speakerColors[group.speaker] || '#ccc'}"
               title={group.speaker || "Unknown"}
             ></div>
             <div class="message-time">
@@ -110,7 +111,7 @@
           <div class="message-content paragraph">
             <span
               class="sentence {group.speaker
-                ? `speaker-sp-${transcriptState.speakers.indexOf(group.speaker)}`
+                ? `speaker-sp-${transcriptStore.speakers.indexOf(group.speaker)}`
                 : ''}"
             >
               {#each group.words as item, wIdx (item.word.id)}
@@ -130,6 +131,7 @@
     max-width: 800px;
     padding: 2rem;
     width: 100%;
+    position: relative;
   }
 
   .paragraph {
@@ -231,5 +233,15 @@
 
   .primary-btn:hover {
     opacity: 0.9;
+  }
+  
+  .panel-label {
+    position: absolute;
+    top: 4px;
+    right: 8px;
+    font-size: 0.7rem;
+    color: #94a3b8;
+    font-family: var(--font-ui);
+    pointer-events: none;
   }
 </style>

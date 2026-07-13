@@ -1,25 +1,29 @@
 <script>
   import { getContext } from "svelte";
 
-  const transcriptState = getContext("TRANSCRIPT_STATE");
+  const transcriptStore = getContext("TRANSCRIPT_STORE");
+  const uiStore = getContext("UI_STORE");
 </script>
 
-{#if !transcriptState.isLoading && !transcriptState.errorMsg && transcriptState.speakers.length > 0}
+{#if !transcriptStore.isLoading && !transcriptStore.errorMsg && transcriptStore.speakers.length > 0}
   <aside class="right-sidebar">
+    {#if uiStore.showPanelLabels}
+      <div class="panel-label">LegendPanel</div>
+    {/if}
     <div class="legend-box">
       <h3 class="legend-title">Speakers</h3>
       <ul class="legend-list">
-        {#each transcriptState.speakers as sp (sp)}
+        {#each transcriptStore.speakers as sp (sp)}
           <li class="legend-item">
             <input
               type="color"
               class="color-picker-dot"
-              value={transcriptState.speakerColors[sp] || "#cccccc"}
+              value={transcriptStore.speakerColors[sp] || "#cccccc"}
               oninput={(e) => {
                 const target = /** @type {HTMLInputElement} */ (e.target);
                 if (target) {
-                  transcriptState.speakerColors[sp] = target.value;
-                  transcriptState.speakerColors = { ...transcriptState.speakerColors }; // trigger reactivity
+                  transcriptStore.speakerColors[sp] = target.value;
+                  transcriptStore.speakerColors = { ...transcriptStore.speakerColors }; // trigger reactivity
                 }
               }}
             />
@@ -28,7 +32,7 @@
               value={sp}
               onblur={(e) => {
                 const target = /** @type {HTMLInputElement} */ (e.target);
-                if (target) transcriptState.renameSpeaker(sp, target.value);
+                if (target) transcriptStore.renameSpeaker(sp, target.value);
               }}
               onkeydown={(e) => {
                 if (e.key === "Enter") {
@@ -145,5 +149,15 @@
     background-color: white;
     border-color: var(--ui-color, #4a90e2);
     outline: none;
+  }
+  
+  .panel-label {
+    position: absolute;
+    top: -10px;
+    right: 8px;
+    font-size: 0.7rem;
+    color: #94a3b8;
+    font-family: var(--font-ui);
+    pointer-events: none;
   }
 </style>

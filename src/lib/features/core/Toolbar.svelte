@@ -10,10 +10,14 @@
     Music,
     Search,
     Sun,
-    Moon
+    Moon,
+    Tags
   } from "@lucide/svelte";
+  import { StorageAdapter } from "./storageAdapter.js";
 
-  const transcriptState = getContext("TRANSCRIPT_STATE");
+  const uiStore = getContext("UI_STORE");
+  const audioStore = getContext("AUDIO_STORE");
+  const transcriptStore = getContext("TRANSCRIPT_STORE");
 
   /** @type {HTMLInputElement} */
   let fileInput;
@@ -40,10 +44,10 @@
   /**
    * @param {any} event
    */
-  function handleFileUpload(event) {
+  async function handleFileUpload(event) {
     const file = event.target.files[0];
     if (file) {
-      transcriptState.loadCsv(file);
+      transcriptStore.loadCsv(file, audioStore);
     }
   }
 
@@ -53,41 +57,110 @@
   function handleAudioUpload(event) {
     const file = event.target.files[0];
     if (file) {
-      transcriptState.handleAudioUpload(file);
+      audioStore.handleAudioUpload(file);
     }
   }
 
-  function handleLoadCsvClick() {
-    const isTauri = typeof window !== "undefined" && /** @type {any} */ (window).__TAURI_INTERNALS__;
-    if (isTauri) {
-      transcriptState.selectAndLoadCsv();
-    } else {
+  async function handleLoadCsvClick() {
+    const path = await StorageAdapter.openCsv();
+    if (path) {
+      const csvStr = await StorageAdapter.readTextFile(path);
+      await transcriptStore.loadCsvFromString(csvStr, path);
+      
+      const expectedAudio = path.replace(/\.csv$/i, ".mp3");
+      const audioUrl = await StorageAdapter.convertFileSrc(expectedAudio);
+      audioStore.loadAudioFromUrl(audioUrl);
+    } else if (!window.__TAURI_INTERNALS__) {
       triggerFileInput();
     }
   }
 
-  function handleLoadAudioClick() {
-    const isTauri = typeof window !== "undefined" && /** @type {any} */ (window).__TAURI_INTERNALS__;
-    if (isTauri) {
-      transcriptState.selectAndLoadAudio();
-    } else {
+  async function handleLoadAudioClick() {
+    const path = await StorageAdapter.openAudio();
+    if (path) {
+      const audioUrl = await StorageAdapter.convertFileSrc(path);
+      audioStore.loadAudioFromUrl(audioUrl);
+    } else if (!window.__TAURI_INTERNALS__) {
       triggerAudioInput();
+    }
+  }
+
+  async function handleSaveCsvClick() {
+    const csvStr = transcriptStore.getCsvString();
+    const filename = "transcript_edited.csv";
+    
+    const newPath = await StorageAdapter.saveTextFile(
+      transcriptStore.currentFilePath, 
+      csvStr, 
+      filename
+    );
+    
+    if (newPath) {
+      transcriptStore.currentFilePath = newPath;
     }
   }
 
   /**
    * @param {any} event
    */
-  function handleExportChange(event) {
+  async function handleExportChange(event) {
     const val = event.target.value;
+    if (!val) return;
+    
+    let ext = val;
+    let mimeType = "text/plain";
+    let content = "";
+    
     if (val === "srt") {
-      transcriptState.exportToSrt();
+      mimeType = "text/srt";
+      content = generateSrt();
     } else if (val === "vtt") {
-      transcriptState.exportToVtt();
+      mimeType = "text/vtt";
+      content = generateVtt();
     } else if (val === "txt") {
-      transcriptState.exportToTxt();
+      content = generateTxt();
     }
+    
+    await StorageAdapter.saveTextFile(null, content, `transcript.${ext}`, mimeType);
     event.target.value = ""; // Reset
+  }
+
+  function formatTimeSub(seconds, isSrt = false) {
+    const s = parseFloat(seconds) || 0;
+    const hrs = Math.floor(s / 3600);
+    const mins = Math.floor((s % 3600) / 60);
+    const secs = Math.floor(s % 60);
+    const ms = Math.floor((s % 1) * 1000);
+    const pad = (num, len = 2) => String(num).padStart(len, "0");
+    const msDelim = isSrt ? "," : ".";
+    return `${pad(hrs)}:${pad(mins)}:${pad(secs)}${msDelim}${pad(ms, 3)}`;
+  }
+
+  function generateSrt() {
+    return transcriptStore.sentenceGroups.map((group, idx) => {
+      const start = formatTimeSub(group.words[0].word.start, true);
+      const end = formatTimeSub(group.words[group.words.length - 1].word.end, true);
+      const text = group.words.map((w) => w.word.word).join(" ");
+      return `${idx + 1}\n${start} --> ${end}\n${group.speaker || "Unknown"}: ${text}\n`;
+    }).join("\n");
+  }
+
+  function generateVtt() {
+    const header = "WEBVTT\n\n";
+    const lines = transcriptStore.sentenceGroups.map((group, idx) => {
+      const start = formatTimeSub(group.words[0].word.start, false);
+      const end = formatTimeSub(group.words[group.words.length - 1].word.end, false);
+      const text = group.words.map((w) => w.word.word).join(" ");
+      return `${idx + 1}\n${start} --> ${end}\n<v ${group.speaker || "Unknown"}>${text}\n`;
+    }).join("\n");
+    return header + lines;
+  }
+
+  function generateTxt() {
+    return transcriptStore.sentenceGroups.map((group) => {
+      const text = group.words.map((w) => w.word.word).join(" ");
+      return `${group.speaker || "Unknown"}: ${text}`;
+    }).join("\n\n");
   }
 
   function toggleSearchPanel() {
@@ -100,16 +173,16 @@
       replaceStatus = "Enter query";
       return;
     }
-    const count = transcriptState.findAndReplace(findQuery, replaceQuery, { caseSensitive, useRegex, wholeWord });
+    const count = transcriptStore.findAndReplace(findQuery, replaceQuery, { caseSensitive, useRegex, wholeWord });
     replaceStatus = `Replaced ${count} items`;
   }
 
   function increaseFontSize() {
-    if (transcriptState.fontScale < 2.5) transcriptState.fontScale += 0.1;
+    if (uiStore.fontScale < 2.5) uiStore.fontScale += 0.1;
   }
 
   function decreaseFontSize() {
-    if (transcriptState.fontScale > 0.6) transcriptState.fontScale -= 0.1;
+    if (uiStore.fontScale > 0.6) uiStore.fontScale -= 0.1;
   }
 </script>
 
@@ -129,16 +202,19 @@
 />
 
 <div class="toolbar-container">
+  {#if uiStore.showPanelLabels}
+    <div class="panel-label">Toolbar</div>
+  {/if}
   <header class="toolbar">
     <div class="toolbar-title">Reader</div>
     <div class="font-controls">
       <label class="toggle-label">
-        <input type="checkbox" bind:checked={transcriptState.showUnderlines} />
+        <input type="checkbox" bind:checked={transcriptStore.showUnderlines} />
         Underlines
       </label>
       <div class="divider"></div>
       <label class="toggle-label">
-        <input type="checkbox" bind:checked={transcriptState.showTablePanel} />
+        <input type="checkbox" bind:checked={uiStore.showTablePanel} />
         Data Table
       </label>
       <div class="divider"></div>
@@ -148,7 +224,7 @@
       <button onclick={handleLoadAudioClick} title="Load Audio" class="icon-btn">
         <Music size={20} />
       </button>
-      <button onclick={() => transcriptState.saveCsv()} title="Save CSV (Ctrl+S)" class="icon-btn">
+      <button onclick={handleSaveCsvClick} title="Save CSV (Ctrl+S)" class="icon-btn">
         <Save size={20} />
       </button>
       <select onchange={handleExportChange} class="export-select" value="">
@@ -161,20 +237,20 @@
         <Search size={20} />
       </button>
       <button
-        onclick={() => transcriptState.undo()}
-        disabled={transcriptState.currentHistoryIndex <= 0}
+        onclick={() => transcriptStore.undo()}
+        disabled={transcriptStore.currentHistoryIndex <= 0}
         title="Undo (Ctrl+Z)"
         class="icon-btn"
-        class:disabled={transcriptState.currentHistoryIndex <= 0}
+        class:disabled={transcriptStore.currentHistoryIndex <= 0}
       >
         <Undo size={20} />
       </button>
       <button
-        onclick={() => transcriptState.redo()}
-        disabled={transcriptState.currentHistoryIndex >= transcriptState.history.length - 1}
+        onclick={() => transcriptStore.redo()}
+        disabled={transcriptStore.currentHistoryIndex >= transcriptStore.history.length - 1}
         title="Redo (Ctrl+Shift+Z)"
         class="icon-btn"
-        class:disabled={transcriptState.currentHistoryIndex >= transcriptState.history.length - 1}
+        class:disabled={transcriptStore.currentHistoryIndex >= transcriptStore.history.length - 1}
       >
         <Redo size={20} />
       </button>
@@ -186,7 +262,7 @@
       >
         <ZoomOut size={20} />
       </button>
-      <div class="scale-indicator">{Math.round(transcriptState.fontScale * 100)}%</div>
+      <div class="scale-indicator">{Math.round(uiStore.fontScale * 100)}%</div>
       <button
         onclick={increaseFontSize}
         title="Increase Font Size"
@@ -196,15 +272,23 @@
       </button>
       <div class="divider"></div>
       <button
-        onclick={() => transcriptState.toggleDarkMode()}
+        onclick={() => uiStore.toggleDarkMode()}
         title="Toggle Theme"
         class="icon-btn"
       >
-        {#if transcriptState.isDarkMode}
+        {#if uiStore.isDarkMode}
           <Sun size={20} />
         {:else}
           <Moon size={20} />
         {/if}
+      </button>
+      <button
+        onclick={() => uiStore.togglePanelLabels()}
+        title="Toggle Panel Labels"
+        class="icon-btn"
+        class:active-panel={uiStore.showPanelLabels}
+      >
+        <Tags size={20} />
       </button>
     </div>
   </header>
@@ -414,5 +498,16 @@
     color: #10b981;
     font-weight: 500;
     margin-left: 0.5rem;
+  }
+  
+  .panel-label {
+    position: absolute;
+    top: 4px;
+    left: 8px;
+    font-size: 0.7rem;
+    color: #94a3b8;
+    font-family: var(--font-ui);
+    pointer-events: none;
+    z-index: 10;
   }
 </style>

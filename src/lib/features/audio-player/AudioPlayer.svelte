@@ -5,7 +5,9 @@
   import TimelinePlugin from "wavesurfer.js/dist/plugins/timeline.esm.js";
   import MinimapPlugin from "wavesurfer.js/dist/plugins/minimap.esm.js";
 
-  const transcriptState = getContext("TRANSCRIPT_STATE");
+  const audioStore = getContext("AUDIO_STORE");
+  const transcriptStore = getContext("TRANSCRIPT_STORE");
+  const uiStore = getContext("UI_STORE");
 
   /** @type {HTMLDivElement | undefined} */
   let waveformEl = $state();
@@ -20,14 +22,14 @@
 
   // Sync volume to audio element
   $effect(() => {
-    if (transcriptState.audio) {
-      transcriptState.audio.volume = volume;
+    if (audioStore.audio) {
+      audioStore.audio.volume = volume;
     }
   });
 
   // Reactively initialize and bind wavesurfer to the HTML5 Audio element
   $effect(() => {
-    if (waveformEl && transcriptState.audio && transcriptState.audioLoaded) {
+    if (waveformEl && audioStore.audio && audioStore.audioLoaded) {
       if (wavesurfer) {
         wavesurfer.destroy();
         waveformEl.innerHTML = "";
@@ -39,7 +41,7 @@
           container: waveformEl,
           waveColor: "#cbd5e1",
           progressColor: "#3b82f6",
-          media: transcriptState.audio,
+          media: audioStore.audio,
           height: 48,
           cursorColor: "#2563eb",
           cursorWidth: 2,
@@ -71,7 +73,7 @@
 
         // Make interactive
         wavesurfer.on('click', () => {
-          transcriptState.audioCurrentTime = wavesurfer.getCurrentTime();
+          audioStore.audioCurrentTime = wavesurfer.getCurrentTime();
         });
 
       } catch (err) {
@@ -111,32 +113,36 @@
    * @param {any} event
    */
   function handleSpeedChange(event) {
-    transcriptState.setPlaybackRate(parseFloat(event.target.value));
+    audioStore.setPlaybackRate(parseFloat(event.target.value));
   }
 </script>
 
-{#if transcriptState.audioLoaded}
+{#if audioStore.audioLoaded}
   <div class="audio-bar">
+    {#if uiStore.showPanelLabels}
+      <div class="panel-label">AudioPlayer</div>
+    {/if}
+    
     <div class="audio-controls">
       <button
         class="audio-btn"
-        onclick={() => transcriptState.togglePlay()}
+        onclick={() => audioStore.togglePlay()}
         title="Play/Pause (Space)"
       >
-        {#if transcriptState.audioPaused}
+        {#if audioStore.audioPaused}
           <Play size={18} />
         {:else}
           <Pause size={18} />
         {/if}
       </button>
-      <button class="audio-btn" onclick={() => transcriptState.stopAudio()} title="Stop">
+      <button class="audio-btn" onclick={() => audioStore.stopAudio()} title="Stop">
         <Square size={18} />
       </button>
       
       <div class="divider"></div>
 
       <select
-        value={transcriptState.playbackRate}
+        value={audioStore.playbackRate}
         onchange={handleSpeedChange}
         class="speed-select"
         title="Playback Speed"
@@ -171,14 +177,14 @@
     </div>
 
     <div class="audio-seeker-container">
-      <span class="audio-time">{formatTime(transcriptState.audioCurrentTime)}</span>
+      <span class="audio-time">{formatTime(audioStore.audioCurrentTime)}</span>
       
       <div class="waveform-container">
         <div bind:this={waveformEl} style="width: 100%;"></div>
         <div bind:this={timelineEl} class="timeline-el"></div>
       </div>
       
-      <span class="audio-time">{formatTime(transcriptState.audioDuration)}</span>
+      <span class="audio-time">{formatTime(audioStore.audioDuration)}</span>
     </div>
   </div>
 {/if}
@@ -292,5 +298,15 @@
   .volume-slider, .zoom-slider {
     width: 60px;
     cursor: pointer;
+  }
+  
+  .panel-label {
+    position: absolute;
+    top: 4px;
+    right: 8px;
+    font-size: 0.7rem;
+    color: #94a3b8;
+    font-family: var(--font-ui);
+    pointer-events: none;
   }
 </style>

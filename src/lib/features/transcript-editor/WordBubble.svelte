@@ -1,40 +1,30 @@
 <script>
   import { getContext, tick } from "svelte";
 
-  // Svelte 5 syntax: props are passed via destructuring of $props()
   let { wordData, index } = $props();
 
-  const transcriptState = getContext("TRANSCRIPT_STATE");
+  const transcriptStore = getContext("TRANSCRIPT_STORE");
+  const audioStore = getContext("AUDIO_STORE");
+  const uiStore = getContext("UI_STORE");
 
   /** @type {HTMLElement | undefined} */
   let element = $state();
 
-  // Register this word span's DOM node in the state reference map
   $effect(() => {
-    transcriptState.wordElements[index] = element;
-    
-    // Caret focus fix: sync textContent only if it actually differs from DOM
-    if (element && transcriptState.words[index]) {
-      const stateWord = transcriptState.words[index].word;
+    if (element && transcriptStore.words[index]) {
+      const stateWord = transcriptStore.words[index].word;
       if (element.textContent !== stateWord) {
         element.textContent = stateWord;
       }
     }
-
-    return () => {
-      delete transcriptState.wordElements[index];
-    };
   });
 
   function handleInput(e) {
-    if (transcriptState.words[index]) {
-      transcriptState.words[index].word = e.target.textContent;
+    if (transcriptStore.words[index]) {
+      transcriptStore.words[index].word = e.target.textContent;
     }
   }
 
-  /**
-   * @param {any} seconds
-   */
   function formatTime(seconds) {
     if (!seconds) return "0:00";
     const s = parseFloat(seconds);
@@ -43,23 +33,20 @@
     return `${m}:${sec.toString().padStart(2, "0")}`;
   }
 
-  /**
-   * @param {any} e
-   */
   async function handleKeydown(e) {
     if (e.key === "Escape") {
       e.preventDefault();
-      transcriptState.togglePlay();
+      audioStore.togglePlay();
       return;
     }
     if (e.key === "ArrowLeft" && e.ctrlKey) {
       e.preventDefault();
-      transcriptState.seekAudioTo(transcriptState.audioCurrentTime - 3);
+      audioStore.seekAudioTo(audioStore.audioCurrentTime - 3);
       return;
     }
     if (e.key === "ArrowRight" && e.ctrlKey) {
       e.preventDefault();
-      transcriptState.seekAudioTo(transcriptState.audioCurrentTime + 3);
+      audioStore.seekAudioTo(audioStore.audioCurrentTime + 3);
       return;
     }
 
@@ -72,22 +59,22 @@
     if (e.key === "Backspace" && caretPos === 0) {
       if (index > 0) {
         e.preventDefault();
-        const prevWord = transcriptState.words[index - 1];
-        const currWord = transcriptState.words[index];
+        const prevWord = transcriptStore.words[index - 1];
+        const currWord = transcriptStore.words[index];
         const prevLength = prevWord.word.length;
 
-        transcriptState.words[index - 1].word = prevWord.word + currWord.word;
+        transcriptStore.words[index - 1].word = prevWord.word + currWord.word;
         if (currWord.end) {
-          transcriptState.words[index - 1].end = currWord.end;
+          transcriptStore.words[index - 1].end = currWord.end;
         }
 
-        transcriptState.words.splice(index, 1);
-        transcriptState.words = transcriptState.words;
-        transcriptState.pushState();
+        transcriptStore.words.splice(index, 1);
+        transcriptStore.words = transcriptStore.words;
+        transcriptStore.pushState();
 
         await tick();
 
-        const prevEl = transcriptState.wordElements[index - 1];
+        const prevEl = document.querySelector(`[data-index="${index - 1}"]`);
         if (prevEl) {
           prevEl.focus();
           const range = document.createRange();
@@ -105,24 +92,24 @@
         }
       }
     } else if (e.key === "Delete" && caretPos === textLen) {
-      if (index < transcriptState.words.length - 1) {
+      if (index < transcriptStore.words.length - 1) {
         e.preventDefault();
-        const currWord = transcriptState.words[index];
-        const nextWord = transcriptState.words[index + 1];
+        const currWord = transcriptStore.words[index];
+        const nextWord = transcriptStore.words[index + 1];
         const currLength = currWord.word.length;
 
-        transcriptState.words[index].word = currWord.word + nextWord.word;
+        transcriptStore.words[index].word = currWord.word + nextWord.word;
         if (nextWord.end) {
-          transcriptState.words[index].end = nextWord.end;
+          transcriptStore.words[index].end = nextWord.end;
         }
 
-        transcriptState.words.splice(index + 1, 1);
-        transcriptState.words = transcriptState.words;
-        transcriptState.pushState();
+        transcriptStore.words.splice(index + 1, 1);
+        transcriptStore.words = transcriptStore.words;
+        transcriptStore.pushState();
 
         await tick();
 
-        const currEl = transcriptState.wordElements[index];
+        const currEl = document.querySelector(`[data-index="${index}"]`);
         if (currEl) {
           currEl.focus();
           const range = document.createRange();
@@ -142,7 +129,7 @@
     } else if (e.key === "ArrowLeft" && caretPos === 0) {
       if (index > 0) {
         e.preventDefault();
-        const prevEl = transcriptState.wordElements[index - 1];
+        const prevEl = document.querySelector(`[data-index="${index - 1}"]`);
         if (prevEl) {
           prevEl.focus();
           const range = document.createRange();
@@ -160,9 +147,9 @@
         }
       }
     } else if (e.key === "ArrowRight" && caretPos === textLen) {
-      if (index < transcriptState.words.length - 1) {
+      if (index < transcriptStore.words.length - 1) {
         e.preventDefault();
-        const nextEl = transcriptState.wordElements[index + 1];
+        const nextEl = document.querySelector(`[data-index="${index + 1}"]`);
         if (nextEl) {
           nextEl.focus();
           const range = document.createRange();
@@ -182,19 +169,10 @@
     }
   }
 
-  /**
-   * @param {any} e
-   */
   function handleContextMenu(e) {
     e.preventDefault();
-    transcriptState.activeWordIndex = index;
-    transcriptState.contextMenu = {
-      show: true,
-      x: e.clientX,
-      y: e.clientY,
-      word: wordData,
-      showDropdown: false,
-    };
+    transcriptStore.activeWordIndex = index;
+    uiStore.showContextMenu(e.clientX, e.clientY, wordData);
   }
 </script>
 
@@ -203,22 +181,23 @@
   role="textbox"
   tabindex="0"
   id="word-{index}"
+  data-index={index}
   class="word"
-  class:active={transcriptState.activeWordIndex === index}
+  class:active={transcriptStore.activeWordIndex === index}
   class:low-confidence={wordData.score !== undefined && wordData.score < 0.8}
   contenteditable="true"
   oninput={handleInput}
   onfocus={() => {
-    transcriptState.activeWordIndex = index;
-    if (transcriptState.words[index] && transcriptState.words[index].start) {
-      transcriptState.seekAudioTo(parseFloat(transcriptState.words[index].start));
+    transcriptStore.activeWordIndex = index;
+    if (transcriptStore.words[index] && transcriptStore.words[index].start) {
+      audioStore.seekAudioTo(parseFloat(transcriptStore.words[index].start));
     }
   }}
-  onblur={() => transcriptState.pushState()}
+  onblur={() => transcriptStore.pushState()}
   onclick={() => {
-    transcriptState.activeWordIndex = index;
-    if (transcriptState.words[index] && transcriptState.words[index].start) {
-      transcriptState.seekAudioTo(parseFloat(transcriptState.words[index].start));
+    transcriptStore.activeWordIndex = index;
+    if (transcriptStore.words[index] && transcriptStore.words[index].start) {
+      audioStore.seekAudioTo(parseFloat(transcriptStore.words[index].start));
     }
   }}
   onkeydown={handleKeydown}
