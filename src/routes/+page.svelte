@@ -1,38 +1,56 @@
 <script>
   import { onMount, onDestroy, setContext } from "svelte";
   import { getCurrentWindow } from "@tauri-apps/api/window";
-  import { TranscriptState } from "$lib/state/transcript.svelte.js";
-  import Toolbar from "$lib/components/Toolbar.svelte";
-  import AudioPlayer from "$lib/components/AudioPlayer.svelte";
-  import TranscriptArea from "$lib/components/TranscriptArea.svelte";
-  import SpeakerLegend from "$lib/components/SpeakerLegend.svelte";
-  import VirtualTable from "$lib/VirtualTable.svelte";
+  
+  import { UiStore } from "$lib/features/core/uiStore.svelte.js";
+  import { AudioStore } from "$lib/features/audio-player/audioStore.svelte.js";
+  import { TranscriptStore } from "$lib/features/transcript-editor/transcriptStore.svelte.js";
+  import { StorageAdapter } from "$lib/features/core/storageAdapter.js";
 
-  // Instantiate the Svelte 5 state manager
-  const transcriptState = new TranscriptState();
+  import Toolbar from "$lib/features/core/Toolbar.svelte";
+  import AudioPlayer from "$lib/features/audio-player/AudioPlayer.svelte";
+  import TranscriptArea from "$lib/features/transcript-editor/TranscriptArea.svelte";
+  import ContextMenu from "$lib/features/transcript-editor/ContextMenu.svelte";
+  import LegendPanel from "$lib/features/speaker-legend/LegendPanel.svelte";
+  import TablePanel from "$lib/features/data-view/TablePanel.svelte";
 
-  // Set the state in context so children can access it
-  setContext("TRANSCRIPT_STATE", transcriptState);
+  // Instantiate the feature stores
+  const uiStore = new UiStore();
+  const audioStore = new AudioStore();
+  const transcriptStore = new TranscriptStore();
+
+  // Provide to children
+  setContext("UI_STORE", uiStore);
+  setContext("AUDIO_STORE", audioStore);
+  setContext("TRANSCRIPT_STORE", transcriptStore);
 
   /** @type {any} */
   let unlistenFileDrop;
 
   onMount(async () => {
-    transcriptState.initDemo();
+    transcriptStore.initDemo();
 
     const isTauri = typeof window !== "undefined" && /** @type {any} */ (window).__TAURI_INTERNALS__;
     if (isTauri) {
       try {
         const appWindow = /** @type {any} */ (getCurrentWindow());
-        unlistenFileDrop = await appWindow.onFileDropEvent((/** @type {any} */ event) => {
+        unlistenFileDrop = await appWindow.onFileDropEvent(async (/** @type {any} */ event) => {
           if (event.payload.type === "drop") {
             const paths = event.payload.paths;
             if (paths && paths.length > 0) {
               const firstPath = paths[0];
               if (firstPath.endsWith(".csv")) {
-                transcriptState.loadCsvFromNativePath(firstPath);
+                const csvStr = await StorageAdapter.readTextFile(firstPath);
+                await transcriptStore.loadCsvFromString(csvStr, firstPath);
+                
+                // Try to load audio automatically
+                const expectedAudio = firstPath.replace(/\.csv$/i, ".mp3");
+                const audioUrl = await StorageAdapter.convertFileSrc(expectedAudio);
+                audioStore.loadAudioFromUrl(audioUrl);
+                
               } else if (/\.(mp3|wav|ogg|m4a|flac)$/i.test(firstPath)) {
-                transcriptState.loadAudioFromNativePath(firstPath);
+                const audioUrl = await StorageAdapter.convertFileSrc(firstPath);
+                audioStore.loadAudioFromUrl(audioUrl);
               }
             }
           }
@@ -44,22 +62,20 @@
   });
 
   onDestroy(() => {
-    transcriptState.destroy();
+    audioStore.destroy();
     if (unlistenFileDrop) {
       unlistenFileDrop();
     }
   });
 
   function handleGlobalClick() {
-    if (transcriptState.contextMenu.show) {
-      transcriptState.contextMenu.show = false;
-    }
+    uiStore.hideContextMenu();
   }
 
   /**
    * @param {any} e
    */
-  function handleGlobalKeydown(e) {
+  async function handleGlobalKeydown(e) {
     if (e.ctrlKey && (e.key === "z" || e.key === "Z")) {
       const isEditing =
         document.activeElement &&
@@ -69,19 +85,31 @@
       if (!isEditing) {
         e.preventDefault();
         if (e.shiftKey) {
-          transcriptState.redo();
+          transcriptStore.redo();
         } else {
-          transcriptState.undo();
+          transcriptStore.undo();
         }
       }
     }
     
     if (e.ctrlKey && (e.key === "s" || e.key === "S")) {
       e.preventDefault();
-      transcriptState.saveCsv();
+      
+      const csvStr = transcriptStore.getCsvString();
+      const filename = "transcript_edited.csv";
+      
+      const newPath = await StorageAdapter.saveTextFile(
+        transcriptStore.currentFilePath, 
+        csvStr, 
+        filename
+      );
+      
+      if (newPath) {
+        transcriptStore.currentFilePath = newPath;
+      }
     }
 
-    if ((e.code === "Space" || e.key === " ") && transcriptState.audioLoaded) {
+    if ((e.code === "Space" || e.key === " ") && audioStore.audioLoaded) {
       const isEditing =
         document.activeElement &&
         (document.activeElement.hasAttribute("contenteditable") ||
@@ -90,47 +118,39 @@
 
       if (!isEditing) {
         e.preventDefault();
-        transcriptState.togglePlay();
+        audioStore.togglePlay();
       }
     }
-  }
-
-  /**
-   * @param {any} seconds
-   */
-  function formatTime(seconds) {
-    if (!seconds) return "0:00";
-    const s = parseFloat(seconds);
-    const m = Math.floor(s / 60);
-    const sec = Math.floor(s % 60);
-    return `${m}:${sec.toString().padStart(2, "0")}`;
   }
 </script>
 
 <svelte:window onclick={handleGlobalClick} onkeydown={handleGlobalKeydown} />
 
-<div class="app-container" style="--dynamic-scale: {transcriptState.fontScale}">
+<div class="app-container" style="--dynamic-scale: {uiStore.fontScale}">
   <!-- Top Toolbar -->
   <Toolbar />
 
   <!-- Sticky Audio Player HUD -->
   <AudioPlayer />
 
-  <div class="content-wrapper {transcriptState.showTablePanel ? 'show-table' : ''}">
+  <div class="content-wrapper {uiStore.showTablePanel ? 'show-table' : ''}">
     <!-- Left Sidebar (Data Table View) -->
-    {#if transcriptState.showTablePanel && !transcriptState.isLoading && !transcriptState.errorMsg}
+    {#if uiStore.showTablePanel && !transcriptStore.isLoading && !transcriptStore.errorMsg}
       <aside class="left-sidebar">
+        {#if uiStore.showPanelLabels}
+          <div class="panel-label">TablePanel</div>
+        {/if}
         <div class="panel-header">
           <h3>Data View</h3>
         </div>
         <div class="panel-content">
-          <VirtualTable
-            bind:words={transcriptState.words}
-            speakers={transcriptState.speakers}
-            bind:activeWordIndex={transcriptState.activeWordIndex}
+          <TablePanel
+            bind:words={transcriptStore.words}
+            speakers={transcriptStore.speakers}
+            bind:activeWordIndex={transcriptStore.activeWordIndex}
             onupdate={() => {
-              transcriptState.words = transcriptState.words;
-              transcriptState.pushState();
+              transcriptStore.words = transcriptStore.words;
+              transcriptStore.pushState();
             }}
           />
         </div>
@@ -141,137 +161,11 @@
     <TranscriptArea />
 
     <!-- Legend Sidebar -->
-    <SpeakerLegend />
+    <LegendPanel />
   </div>
 
   <!-- Context Menu for Speakers -->
-  {#if transcriptState.contextMenu.show && transcriptState.contextMenu.word}
-    <!-- svelte-ignore a11y-click-events-have-key-events -->
-    <!-- svelte-ignore a11y-no-static-element-interactions -->
-    <div
-      class="context-menu"
-      style="left: {transcriptState.contextMenu.x}px; top: {transcriptState.contextMenu.y}px;"
-      onclick={(e) => e.stopPropagation()}
-    >
-      <div class="menu-item custom-dropdown-wrapper">
-        <strong>Speaker:</strong>
-
-        <div class="custom-select-container">
-          <button
-            class="custom-select-btn"
-            onclick={() =>
-              (transcriptState.contextMenu.showDropdown = !transcriptState.contextMenu.showDropdown)}
-          >
-            <span
-              class="color-dot"
-              style="background-color: {transcriptState.speakerColors[
-                transcriptState.contextMenu.word.speaker
-              ] || '#ccc'}"
-            ></span>
-            {transcriptState.contextMenu.word.speaker || "Unknown"}
-          </button>
-
-          {#if transcriptState.contextMenu.showDropdown}
-            <div class="custom-select-dropdown">
-              {#each transcriptState.speakers as sp}
-                <button
-                  class="custom-option"
-                  onclick={() => {
-                    if (transcriptState.contextMenu.word) {
-                      transcriptState.contextMenu.word.speaker = sp;
-                    }
-                    transcriptState.words = transcriptState.words; // trigger reactivity
-                    transcriptState.contextMenu.showDropdown = false;
-                    transcriptState.contextMenu.show = false;
-                    transcriptState.pushState();
-                  }}
-                >
-                  <span
-                    class="color-dot"
-                    style="background-color: {transcriptState.speakerColors[sp]}"
-                  ></span>
-                  {sp}
-                </button>
-              {/each}
-            </div>
-          {/if}
-        </div>
-      </div>
-      
-      <div class="menu-item">
-        <strong>Split segment:</strong>
-        <select
-          onchange={(e) => {
-            const target = /** @type {HTMLSelectElement} */ (e.target);
-            if (target && target.value && transcriptState.activeWordIndex !== null) {
-              if (target.value === "NEW_SPEAKER") {
-                let newSp = prompt("Enter new speaker name:");
-                if (newSp) {
-                  newSp = newSp.trim();
-                  if (newSp) {
-                    transcriptState.splitSegmentAt(transcriptState.activeWordIndex, newSp);
-                  }
-                }
-              } else {
-                transcriptState.splitSegmentAt(transcriptState.activeWordIndex, target.value);
-              }
-              transcriptState.contextMenu.show = false;
-            }
-          }}
-          value=""
-          class="speaker-select"
-        >
-          <option value="" disabled>Select speaker...</option>
-          {#each transcriptState.speakers as sp}
-            <option value={sp}>{sp}</option>
-          {/each}
-          <option value="NEW_SPEAKER">+ New Speaker...</option>
-        </select>
-      </div>
-
-      <div class="menu-item custom-dropdown-wrapper">
-        <strong>Time:</strong>
-        <div class="time-edit-row">
-          <input 
-            type="text" 
-            class="time-input" 
-            bind:value={transcriptState.contextMenu.word.start}
-          />
-          - 
-          <input 
-            type="text" 
-            class="time-input" 
-            bind:value={transcriptState.contextMenu.word.end}
-          />
-          <button class="save-time-btn" onclick={() => {
-            if (transcriptState.activeWordIndex !== null) {
-              transcriptState.updateTimestamp(
-                transcriptState.activeWordIndex, 
-                transcriptState.contextMenu.word.start, 
-                transcriptState.contextMenu.word.end
-              );
-            }
-            transcriptState.contextMenu.show = false;
-          }}>Save</button>
-        </div>
-      </div>
-
-      <div class="menu-item segment-actions">
-        <button class="segment-btn" onclick={() => {
-          if (transcriptState.activeWordIndex !== null) {
-            transcriptState.splitWord(transcriptState.activeWordIndex);
-          }
-          transcriptState.contextMenu.show = false;
-        }}>Split Word</button>
-        <button class="segment-btn" onclick={() => {
-          if (transcriptState.activeWordIndex !== null) {
-            transcriptState.mergeWord(transcriptState.activeWordIndex);
-          }
-          transcriptState.contextMenu.show = false;
-        }}>Merge with Next</button>
-      </div>
-    </div>
-  {/if}
+  <ContextMenu />
 </div>
 
 <style>
@@ -294,7 +188,7 @@
   }
 
   .content-wrapper.show-table {
-    max-width: 100%; /* Take full width when table is open */
+    max-width: 100%;
     padding: 0 1rem;
   }
 
@@ -308,7 +202,7 @@
     flex-shrink: 0;
     border-right: 1px solid rgba(0, 0, 0, 0.05);
     margin-right: 1rem;
-    height: calc(100vh - 130px); /* Height minus toolbar and audio bar */
+    height: calc(100vh - 130px);
     position: sticky;
     top: 130px;
   }
@@ -326,187 +220,19 @@
 
   .panel-content {
     flex: 1;
-    overflow: hidden; /* VirtualTable handles its own scroll */
+    overflow: hidden;
     padding-right: 1rem;
     min-height: 0;
   }
-
-  .context-menu {
-    position: fixed;
-    background: rgba(255, 255, 255, 0.95);
-    backdrop-filter: blur(12px);
-    border: 1px solid rgba(0, 0, 0, 0.1);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-    border-radius: 8px;
-    padding: 0.5rem;
-    z-index: 1000;
-    min-width: 180px;
-    font-family: var(--font-ui);
-  }
-
-  .menu-item {
-    font-size: 0.85rem;
-    color: var(--text-color);
-    padding: 0.5rem;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
-
-  .menu-item strong {
-    font-weight: 600;
-    color: var(--ui-color);
-  }
-
-  .speaker-select {
-    font-family: inherit;
-    font-size: 0.85rem;
-    padding: 0.2rem 0.5rem;
-    border-radius: 4px;
-    border: 1px solid rgba(0, 0, 0, 0.2);
-    background: white;
-    color: var(--text-color);
-    outline: none;
-    cursor: pointer;
-    flex: 1;
-    max-width: 120px;
-  }
-
-  .speaker-select:focus {
-    border-color: var(--ui-color);
-  }
-
-  .custom-dropdown-wrapper {
-    align-items: flex-start;
-  }
-
-  .custom-dropdown-wrapper strong {
-    margin-top: 0.35rem;
-  }
-
-  .custom-select-container {
-    position: relative;
-    flex: 1;
-  }
-
-  .custom-select-btn {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    width: 100%;
-    background: white;
-    border: 1px solid rgba(0, 0, 0, 0.2);
-    border-radius: 4px;
-    padding: 0.3rem 0.5rem;
-    font-family: inherit;
-    font-size: 0.85rem;
-    color: var(--text-color);
-    cursor: pointer;
-    text-align: left;
-  }
-
-  .custom-select-btn:focus {
-    border-color: var(--ui-color);
-    outline: none;
-  }
-
-  .custom-select-dropdown {
+  
+  .panel-label {
     position: absolute;
-    top: 100%;
-    left: 0;
-    right: 0;
-    margin-top: 4px;
-    background: white;
-    border: 1px solid rgba(0, 0, 0, 0.1);
-    border-radius: 4px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-    z-index: 1010;
-    max-height: 200px;
-    overflow-y: auto;
-  }
-
-  .custom-option {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    width: 100%;
-    padding: 0.4rem 0.5rem;
-    background: none;
-    border: none;
-    font-family: inherit;
-    font-size: 0.85rem;
-    color: var(--text-color);
-    cursor: pointer;
-    text-align: left;
-    transition: background-color 0.1s;
-  }
-
-  .custom-option:hover {
-    background: rgba(0, 0, 0, 0.05);
-  }
-
-  .color-dot {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    flex-shrink: 0;
-  }
-
-  .time-edit-row {
-    display: flex;
-    align-items: center;
-    gap: 0.25rem;
-  }
-
-  .time-input {
-    width: 50px;
-    font-family: inherit;
-    font-size: 0.8rem;
-    padding: 0.2rem;
-    border: 1px solid rgba(0,0,0,0.2);
-    border-radius: 4px;
-    text-align: center;
-    color: var(--text-color);
-    background: white;
-  }
-
-  .save-time-btn {
-    background: var(--accent-color);
-    color: white;
-    border: none;
-    border-radius: 4px;
-    padding: 0.2rem 0.5rem;
-    font-size: 0.75rem;
-    cursor: pointer;
-    margin-left: 0.25rem;
-  }
-
-  .save-time-btn:hover {
-    opacity: 0.9;
-  }
-
-  .segment-actions {
-    display: flex;
-    gap: 0.5rem;
-    justify-content: center;
-    border-top: 1px solid rgba(0,0,0,0.05);
-    padding-top: 0.75rem;
-    margin-top: 0.25rem;
-  }
-
-  .segment-btn {
-    background: rgba(0,0,0,0.05);
-    border: 1px solid rgba(0,0,0,0.1);
-    border-radius: 4px;
-    padding: 0.3rem 0.6rem;
-    font-family: inherit;
-    font-size: 0.8rem;
-    color: var(--text-color);
-    cursor: pointer;
-    flex: 1;
-  }
-
-  .segment-btn:hover {
-    background: rgba(0,0,0,0.1);
+    top: 4px;
+    right: 8px;
+    font-size: 0.7rem;
+    color: #94a3b8;
+    font-family: var(--font-ui);
+    pointer-events: none;
+    z-index: 10;
   }
 </style>
