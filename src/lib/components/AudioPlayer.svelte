@@ -174,7 +174,7 @@
       <span class="audio-time">{formatTime(transcriptState.audioCurrentTime)}</span>
       
       <div class="waveform-container">
-        <div bind:this={waveformEl}></div>
+        <div bind:this={waveformEl} style="width: 100%;"></div>
         <div bind:this={timelineEl} class="timeline-el"></div>
       </div>
       
@@ -253,6 +253,7 @@
     display: flex;
     align-items: center;
     gap: 1rem;
+    min-width: 0;
   }
 
   .audio-time {
@@ -274,6 +275,7 @@
     display: flex;
     flex-direction: column;
     gap: 4px;
+    min-width: 0;
   }
 
   .timeline-el {
