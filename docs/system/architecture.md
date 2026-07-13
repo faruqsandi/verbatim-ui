@@ -46,6 +46,17 @@ All runtime data is managed via feature-specific Svelte 5 context stores and rea
 *   **Virtualized Table View**: Large transcripts can feature thousands of rows. The `TablePanel.svelte` component (`features/data-view`) virtually scrolls the word arrays, rendering only the rows within the viewport buffer (plus padding) to maintain rendering speeds.
 *   **Properties Panel**: The `PropertiesPanel.svelte` component (`features/properties-panel`) provides a dedicated, fixed-width right sidebar for modifying speaker metadata, colors, and future document properties without floating over the text.
 
+### 3. Project Management & Storage
+The application separates standard exporting from internal project state management using a custom `.vprj` format.
+*   **`.vprj` Format**: A lightweight JSON file containing metadata (speaker colors), transcription word arrays, and the absolute path to the local audio file. This avoids duplicating heavy audio files on disk.
+*   **Cross-Platform File System Access**: 
+    *   **Tauri Desktop**: Uses `@tauri-apps/plugin-dialog` and `@tauri-apps/plugin-fs` to silently overwrite project files on `Ctrl+S`.
+    *   **Web Browser**: Uses the modern **File System Access API** (`window.showSaveFilePicker()`) to maintain a file handle, allowing silent overwrites without triggering a new "Download" prompt every save.
+*   **Autosave & Crash Recovery**:
+    *   **Tauri Desktop**: Dumps `latest.vprj.tmp` into the operating system's `AppData/Local/VerbatimUI/autosaves` directory via the Tauri FS plugin.
+    *   **Web Browser**: Stores autosave JSON in the browser's **IndexedDB** since browsers cannot invisibly write to the host filesystem.
+    *   When the app mounts, it checks these locations and prompts the user to recover unsaved changes if a dirty exit occurred.
+
 ---
 
 ## 🔊 Audio Engine
