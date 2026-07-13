@@ -1,5 +1,7 @@
 # ADR-0001: Modularize Components and Migrate to Svelte 5 Runes
 
+**Status**: Superseded by [ADR-0006](file:///home/bit/Playground/verbatim-ui/docs/adr/0006-vertical-slicing-architecture.md)
+
 ## Context
 
 The current frontend codebase features a monolithic page component ([+page.svelte](file:///home/bit/Playground/verbatim-ui/src/routes/+page.svelte)) that spans over 1,450 lines of code. This single file manages:

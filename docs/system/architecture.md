@@ -25,22 +25,25 @@ graph TD
 
 ---
 
-## 🏗️ Architecture Design & Components
+## 🏗️ Architecture Design & Components (Vertical Slicing)
+
+The application utilizes a **Feature-Driven Architecture (Vertical Slicing)**, grouping files by feature domain inside `src/lib/features/` rather than by technical type.
 
 ### 1. Frontend-Backend Boundary
-The relationship between the Rust backend (`src-tauri`) and the Webview frontend (`src`) is structured as follows:
+The relationship between the Rust backend (`src-tauri`) and the Webview frontend (`src`) is abstracted by the `StorageAdapter`:
 *   **Rust Shell**: The backend ([src-tauri/src/lib.rs](file:///home/bit/Playground/verbatim-ui/src-tauri/src/lib.rs)) instantiates the application window, registers official plugins (`tauri-plugin-opener`, `tauri-plugin-dialog`, `tauri-plugin-fs`), and exposes an unused `load_csv_data` command.
-*   **Tauri Plugins Access**: The frontend bypasses custom IPC commands and invokes the host OS directly using Tauri v2 JavaScript client APIs:
+*   **StorageAdapter (`features/core/storageAdapter.js`)**: The frontend bypasses custom IPC commands and invokes the host OS directly using Tauri v2 JavaScript client APIs:
     *   `@tauri-apps/plugin-dialog` to launch native OS Open/Save file dialogues.
     *   `@tauri-apps/plugin-fs` to perform direct file reading and writing of CSV transcriptions.
-    *   `getCurrentWindow().onFileDropEvent` to handle native OS drag-and-drop operations for `.csv` and audio files.
+    *   `getCurrentWindow().onFileDropEvent` to handle native OS drag-and-drop operations.
+    The adapter gracefully falls back to Web `<input type="file">` and `Blob` downloads when running purely in the browser.
 
 ### 2. State & Data Flow
-All runtime data is managed via Svelte 5 context injection and reactive runes:
-*   **Context Store (`TRANSCRIPT_STATE`)**: The application instantiates a centralized `TranscriptState` class (from [transcript.svelte.js](file:///home/bit/Playground/verbatim-ui/src/lib/state/transcript.svelte.js)) in the root [+page.svelte](file:///home/bit/Playground/verbatim-ui/src/routes/+page.svelte) and registers it in Svelte's context. Subcomponents query this context to retrieve and alter states.
-*   **Runes**: Reactive properties (`words`, `activeWordIndex`, `audioCurrentTime`, `showUnderlines`, etc.) are declared using the `$state` rune, while computed arrays like `sentenceGroups` and `speakers` utilize `$derived`.
-*   **History Stack (`history`)**: The store maintains a history stack of the `words` array. Undoing and redoing is handled by swapping active array values back to historical snapshots.
-*   **Virtualized Table View**: Large transcripts can feature thousands of rows. The [VirtualTable.svelte](file:///home/bit/Playground/verbatim-ui/src/lib/VirtualTable.svelte) component virtually scrolls the word arrays, rendering only the rows within the viewport buffer (plus padding) to maintain rendering speeds.
+All runtime data is managed via feature-specific Svelte 5 context stores and reactive runes:
+*   **Domain Stores**: The application instantiates specialized domain stores (`UiStore`, `AudioStore`, `TranscriptStore`) in the root [+page.svelte](file:///home/bit/Playground/verbatim-ui/src/routes/+page.svelte) and registers them in Svelte's context. Subcomponents query these stores to retrieve and alter states.
+*   **Runes**: Reactive properties (`words`, `activeWordIndex`, `audioCurrentTime`, etc.) are declared using the `$state` rune, while computed arrays like `sentenceGroups` and `speakers` utilize `$derived`.
+*   **History Stack (`history`)**: The `TranscriptStore` maintains a history stack of the `words` array. Undoing and redoing is handled by swapping active array values back to historical snapshots.
+*   **Virtualized Table View**: Large transcripts can feature thousands of rows. The `TablePanel.svelte` component (`features/data-view`) virtually scrolls the word arrays, rendering only the rows within the viewport buffer (plus padding) to maintain rendering speeds.
 
 ---
 
@@ -48,9 +51,9 @@ All runtime data is managed via Svelte 5 context injection and reactive runes:
 
 The application streams audio efficiently without fully loading files into RAM:
 1.  **Native File Conversion**: Local audio files loaded via native dialogues or file drops are converted to a webview-accessible URL using Tauri's native core `convertFileSrc`.
-2.  **HTML5 Streaming**: An HTML5 `<audio>` element (instantiated in the store constructor) streams the audio content.
-3.  **Waveform Integration**: A `wavesurfer.js` instance in [AudioPlayer.svelte](file:///home/bit/Playground/verbatim-ui/src/lib/components/AudioPlayer.svelte) binds directly to the HTML5 `<audio>` media node, drawing the waveform and monitoring playback progress natively.
-4.  **Time Synchronization**: An animation frame loop (`requestAnimationFrame`) in the store polls the elapsed playback time from the `<audio>` element. When the time falls within a word's start and end timestamps, `activeWordIndex` is updated, prompting automatic smooth-scrolling to bring the active word bubble into view.
+2.  **HTML5 Streaming**: An HTML5 `<audio>` element (instantiated in the `AudioStore`) streams the audio content.
+3.  **Waveform Integration**: A `wavesurfer.js` instance in `AudioPlayer.svelte` (`features/audio-player`) binds directly to the HTML5 `<audio>` media node, drawing the waveform and monitoring playback progress natively.
+4.  **Time Synchronization**: An animation frame loop (`requestAnimationFrame`) in the `AudioStore` polls the elapsed playback time from the `<audio>` element. When the time falls within a word's start and end timestamps, `activeWordIndex` is updated, prompting automatic smooth-scrolling to bring the active word bubble into view.
 
 ---
 
