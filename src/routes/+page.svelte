@@ -13,6 +13,7 @@
   import ContextMenu from "$lib/features/transcript-editor/ContextMenu.svelte";
   import PropertiesPanel from "$lib/features/properties-panel/PropertiesPanel.svelte";
   import TablePanel from "$lib/features/data-view/TablePanel.svelte";
+  import WelcomeScreen from "$lib/features/core/WelcomeScreen.svelte";
 
   // Instantiate the feature stores
   const uiStore = new UiStore();
@@ -28,7 +29,21 @@
   let unlistenFileDrop;
 
   onMount(async () => {
-    transcriptStore.initDemo();
+    // Check for autosave
+    const autosaveData = await StorageAdapter.getAutosave();
+    if (autosaveData) {
+      if (confirm("Verbatim UI closed unexpectedly. Would you like to recover your unsaved changes?")) {
+        await transcriptStore.loadProject(autosaveData, audioStore);
+        // On Web, audio relinking will still need to happen manually.
+        // On Desktop, we can try to re-link immediately.
+        if (autosaveData.audioPath && typeof window !== "undefined" && window.__TAURI_INTERNALS__) {
+          const audioUrl = await StorageAdapter.convertFileSrc(autosaveData.audioPath);
+          audioStore.loadAudioFromUrl(audioUrl);
+        }
+      } else {
+        await StorageAdapter.clearAutosave();
+      }
+    }
 
     const isTauri = typeof window !== "undefined" && /** @type {any} */ (window).__TAURI_INTERNALS__;
     if (isTauri) {
@@ -95,17 +110,20 @@
     if (e.ctrlKey && (e.key === "s" || e.key === "S")) {
       e.preventDefault();
       
-      const csvStr = transcriptStore.getCsvString();
-      const filename = "transcript_edited.csv";
+      if (!transcriptStore.isProjectOpen) return;
       
-      const newPath = await StorageAdapter.saveTextFile(
+      const projectData = transcriptStore.serializeProject();
+      const result = await StorageAdapter.saveProject(
         transcriptStore.currentFilePath, 
-        csvStr, 
-        filename
+        uiStore.webFileHandle,
+        projectData,
+        false
       );
       
-      if (newPath) {
-        transcriptStore.currentFilePath = newPath;
+      if (result) {
+        transcriptStore.currentFilePath = result.path;
+        uiStore.webFileHandle = result.handle;
+        await StorageAdapter.clearAutosave(); // Clear autosave on clean save
       }
     }
 
@@ -126,8 +144,11 @@
 
 <svelte:window onclick={handleGlobalClick} onkeydown={handleGlobalKeydown} />
 
-<div class="app-container" style="--dynamic-scale: {uiStore.fontScale}">
-  <!-- Top Toolbar -->
+{#if !transcriptStore.isProjectOpen}
+  <WelcomeScreen />
+{:else}
+  <div class="app-container" style="--dynamic-scale: {uiStore.fontScale}">
+    <!-- Top Toolbar -->
   <Toolbar />
 
   <!-- Sticky Audio Player HUD -->
@@ -168,7 +189,8 @@
 
   <!-- Context Menu for Speakers -->
   <ContextMenu />
-</div>
+  </div>
+{/if}
 
 <style>
   .app-container {

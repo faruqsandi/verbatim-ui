@@ -11,7 +11,10 @@
     Search,
     Sun,
     Moon,
-    Tags
+    Tags,
+    FilePlus,
+    FolderOpen,
+    Download
   } from "@lucide/svelte";
   import { StorageAdapter } from "./storageAdapter.js";
 
@@ -66,11 +69,7 @@
     if (path) {
       const csvStr = await StorageAdapter.readTextFile(path);
       await transcriptStore.loadCsvFromString(csvStr, path);
-      
-      const expectedAudio = path.replace(/\.csv$/i, ".mp3");
-      const audioUrl = await StorageAdapter.convertFileSrc(expectedAudio);
-      audioStore.loadAudioFromUrl(audioUrl);
-    } else if (!window.__TAURI_INTERNALS__) {
+    } else if (typeof window !== "undefined" && !window.__TAURI_INTERNALS__) {
       triggerFileInput();
     }
   }
@@ -78,25 +77,69 @@
   async function handleLoadAudioClick() {
     const path = await StorageAdapter.openAudio();
     if (path) {
+      transcriptStore.audioPath = path;
       const audioUrl = await StorageAdapter.convertFileSrc(path);
       audioStore.loadAudioFromUrl(audioUrl);
-    } else if (!window.__TAURI_INTERNALS__) {
+      transcriptStore.pushState(); // trigger autosave
+    } else if (typeof window !== "undefined" && !window.__TAURI_INTERNALS__) {
       triggerAudioInput();
     }
   }
 
-  async function handleSaveCsvClick() {
-    const csvStr = transcriptStore.getCsvString();
-    const filename = "transcript_edited.csv";
-    
-    const newPath = await StorageAdapter.saveTextFile(
+  async function handleSaveProjectClick() {
+    const projectData = transcriptStore.serializeProject();
+    const result = await StorageAdapter.saveProject(
       transcriptStore.currentFilePath, 
-      csvStr, 
-      filename
+      uiStore.webFileHandle,
+      projectData,
+      false
     );
     
-    if (newPath) {
-      transcriptStore.currentFilePath = newPath;
+    if (result) {
+      transcriptStore.currentFilePath = result.path;
+      uiStore.webFileHandle = result.handle;
+      await StorageAdapter.clearAutosave();
+    }
+  }
+
+  async function handleNewProject() {
+    const result = await StorageAdapter.saveProject("Untitled.vprj", null, {
+      version: 1,
+      audioPath: null,
+      speakers: [],
+      speakerColors: {},
+      words: []
+    }, true);
+
+    if (result) {
+      transcriptStore.currentFilePath = result.path;
+      uiStore.webFileHandle = result.handle;
+      transcriptStore.isProjectOpen = true;
+      transcriptStore.words = [];
+      transcriptStore.history = [];
+      transcriptStore.currentHistoryIndex = -1;
+      transcriptStore.speakerColors = {};
+      transcriptStore.audioPath = null;
+      audioStore.destroy(); // Clear audio
+    }
+  }
+
+  async function handleOpenProject() {
+    const result = await StorageAdapter.openProject();
+    if (result && result.data) {
+      transcriptStore.currentFilePath = result.path;
+      uiStore.webFileHandle = result.handle;
+      await transcriptStore.loadProject(result.data, audioStore);
+
+      if (result.data.audioPath) {
+        if (typeof window !== "undefined" && !window.__TAURI_INTERNALS__) {
+          alert("Please select the audio file for this project: " + result.data.audioPath.split(/[/\\]/).pop());
+          triggerAudioInput();
+        } else {
+          const audioUrl = await StorageAdapter.convertFileSrc(result.data.audioPath);
+          audioStore.loadAudioFromUrl(audioUrl);
+        }
+      }
     }
   }
 
@@ -111,7 +154,10 @@
     let mimeType = "text/plain";
     let content = "";
     
-    if (val === "srt") {
+    if (val === "csv") {
+      mimeType = "text/csv";
+      content = transcriptStore.getCsvString();
+    } else if (val === "srt") {
       mimeType = "text/srt";
       content = generateSrt();
     } else if (val === "vtt") {
@@ -121,7 +167,7 @@
       content = generateTxt();
     }
     
-    await StorageAdapter.saveTextFile(null, content, `transcript.${ext}`, mimeType);
+    await StorageAdapter.exportTextFile(content, `export.${ext}`, mimeType);
     event.target.value = ""; // Reset
   }
 
@@ -222,22 +268,30 @@
         <input type="checkbox" bind:checked={uiStore.showPropertiesPanel} />
         Properties
       </label>
+      <button onclick={handleNewProject} title="New Project" class="icon-btn">
+        <FilePlus size={20} />
+      </button>
+      <button onclick={handleOpenProject} title="Open Project" class="icon-btn">
+        <FolderOpen size={20} />
+      </button>
+      <button onclick={handleSaveProjectClick} title="Save Project (Ctrl+S)" class="icon-btn">
+        <Save size={20} />
+      </button>
       <div class="divider"></div>
-      <button onclick={handleLoadCsvClick} title="Load CSV" class="icon-btn">
+      <button onclick={handleLoadCsvClick} title="Import CSV Data" class="icon-btn">
         <Upload size={20} />
       </button>
-      <button onclick={handleLoadAudioClick} title="Load Audio" class="icon-btn">
+      <button onclick={handleLoadAudioClick} title="Import Audio" class="icon-btn">
         <Music size={20} />
-      </button>
-      <button onclick={handleSaveCsvClick} title="Save CSV (Ctrl+S)" class="icon-btn">
-        <Save size={20} />
       </button>
       <select onchange={handleExportChange} class="export-select" value="">
         <option value="" disabled>Export As...</option>
+        <option value="csv">CSV Data</option>
         <option value="srt">SRT Subtitles</option>
         <option value="vtt">WebVTT Subtitles</option>
         <option value="txt">TXT Transcript</option>
       </select>
+      <div class="divider"></div>
       <button onclick={toggleSearchPanel} title="Find & Replace" class="icon-btn" class:active-panel={showSearchPanel}>
         <Search size={20} />
       </button>

@@ -9,6 +9,9 @@ export class TranscriptStore {
   isLoading = $state(true);
   errorMsg = $state("");
 
+  isProjectOpen = $state(false);
+  audioPath = $state(null);
+
   showUnderlines = $state(true);
 
   // Speaker color map
@@ -70,10 +73,56 @@ export class TranscriptStore {
     this.isLoading = false;
     this.errorMsg = "";
     this.currentFilePath = null;
+    this.audioPath = null;
+    this.isProjectOpen = false;
     this.words = [];
     this.history = [];
     this.currentHistoryIndex = -1;
   }
+
+  // -----------------------
+  // Project Lifecycle
+  // -----------------------
+  
+  serializeProject() {
+    return {
+      version: 1,
+      audioPath: this.audioPath,
+      speakers: this.speakers,
+      speakerColors: this.speakerColors,
+      words: this.words
+    };
+  }
+
+  async loadProject(projectData, audioStore) {
+    this.isLoading = true;
+    this.errorMsg = "";
+    
+    try {
+      this.words = projectData.words || [];
+      this.speakerColors = projectData.speakerColors || {};
+      this.audioPath = projectData.audioPath || null;
+      
+      this.history = [];
+      this.currentHistoryIndex = -1;
+      this.pushState(true); // Push initial state without triggering autosave immediately
+      
+      if (this.audioPath && audioStore) {
+        // We defer audio loading to the component that calls this, 
+        // because on Web we need user interaction to reconnect the file.
+      }
+      
+      this.isProjectOpen = true;
+      this.isLoading = false;
+    } catch (e) {
+      this.errorMsg = "Failed to load project data";
+      this.isLoading = false;
+    }
+  }
+
+  // -----------------------
+  // Raw Data Loading
+  // -----------------------
 
   async loadDemoData(audioStore) {
     this.isLoading = true;
@@ -208,7 +257,7 @@ export class TranscriptStore {
     );
   }
 
-  pushState() {
+  pushState(skipAutosave = false) {
     const currentSnapshot = this.words.map((w) => ({ ...w }));
 
     if (this.currentHistoryIndex === -1) {
@@ -237,6 +286,20 @@ export class TranscriptStore {
     } else {
       this.currentHistoryIndex++;
     }
+
+    if (!skipAutosave && this.isProjectOpen) {
+      this._triggerAutosave();
+    }
+  }
+
+  _autosaveTimeout = null;
+  _triggerAutosave() {
+    if (this._autosaveTimeout) clearTimeout(this._autosaveTimeout);
+    this._autosaveTimeout = setTimeout(() => {
+      import("../core/storageAdapter.js").then(({ StorageAdapter }) => {
+        StorageAdapter.saveAutosave(this.serializeProject());
+      });
+    }, 2000); // debounce 2 seconds
   }
 
   _getStateAt(index) {

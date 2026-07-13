@@ -4,6 +4,9 @@ export class UiStore {
   isDarkMode = $state(false);
   showPanelLabels = $state(true);
   showPropertiesPanel = $state(true);
+
+  /** @type {any} */
+  webFileHandle = $state(null);
   
   contextMenu = $state({
     show: false,
