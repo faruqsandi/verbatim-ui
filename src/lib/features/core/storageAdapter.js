@@ -89,6 +89,9 @@ export class StorageAdapter {
         }
         
         if (savePath) {
+          if (!savePath.endsWith(".vprj")) {
+            savePath += ".vprj";
+          }
           await writeTextFile(savePath, content);
           return { path: savePath, handle: null };
         }
