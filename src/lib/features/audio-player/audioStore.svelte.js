@@ -4,10 +4,19 @@ export class AudioStore {
   audioCurrentTime = $state(0);
   audioPaused = $state(true);
   playbackRate = $state(1.0);
+  peaks = $state([]);
 
-  /** @type {HTMLAudioElement} */
-  audio;
-  /** @type {number | null} */
+  /** @type {AudioContext} */
+  ctx;
+  /** @type {AudioBuffer | null} */
+  buffer = null;
+  /** @type {AudioBufferSourceNode | null} */
+  source = null;
+  /** @type {GainNode} */
+  gainNode;
+
+  startTime = 0;
+  startOffset = 0;
   _animFrameId = null;
 
   /** @type {any} */
@@ -22,95 +31,143 @@ export class AudioStore {
   }
 
   constructor() {
-    this._updateTime = this._updateTime.bind(this);
-    
-    // Initialize HTML5 Audio (Only in browser environment)
     if (typeof window !== "undefined") {
-      this.audio = new Audio();
-      
-      this.audio.onplay = () => {
-        this.audioPaused = false;
-        this.log("DEBUG", "audio.onplay fired");
-        this._startTimeSync();
-      };
-      
-      this.audio.onpause = () => {
-        this.audioPaused = true;
-        this.log("DEBUG", "audio.onpause fired");
-        this._stopTimeSync();
-      };
-      
-      this.audio.onended = () => {
-        this.audioPaused = true;
-        this.audioCurrentTime = 0;
-        this.log("DEBUG", "audio.onended fired");
-        this._stopTimeSync();
-      };
-      
-      this.audio.onloadedmetadata = () => {
-        this.audioDuration = this.audio.duration;
-        this.audioLoaded = true;
-        this.log("INFO", `Audio metadata loaded. Duration: ${this.audio.duration}s`);
-      };
-
-      this.audio.onerror = () => {
-        const error = this.audio.error;
-        let details = "Unknown error";
-        if (error) {
-          details = `Code: ${error.code}. Message: ${error.message || "none"}`;
-        }
-        this.log("ERROR", `Audio playback error: ${details}`);
-      };
-
-      this.audio.onseeked = () => {
-        this.audioCurrentTime = this.audio.currentTime;
-        this.log("DEBUG", `audio.onseeked to: ${this.audio.currentTime}s`);
-      };
-
-      this.audio.onratechange = () => {
-        this.playbackRate = this.audio.playbackRate;
-        this.log("DEBUG", `audio.onratechange to: ${this.audio.playbackRate}x`);
-      };
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (AudioCtx) {
+        this.ctx = new AudioCtx();
+        this.gainNode = this.ctx.createGain();
+        this.gainNode.connect(this.ctx.destination);
+      }
     }
   }
 
-  loadAudioFromUrl(url) {
-    if (!this.audio) return;
+  getPeaks(width = 1000) {
+    if (!this.buffer) return [];
+    this.log("DEBUG", `Generating ${width} peaks from decoded AudioBuffer`);
+    const channelData = this.buffer.getChannelData(0);
+    const step = Math.floor(channelData.length / width) || 1;
+    const peaks = [];
+    for (let i = 0; i < width; i++) {
+      let max = 0;
+      const start = i * step;
+      const end = Math.min(channelData.length, start + step);
+      for (let j = start; j < end; j++) {
+        const val = Math.abs(channelData[j]);
+        if (val > max) max = val;
+      }
+      peaks.push(max);
+    }
+    return peaks;
+  }
+
+  async _decodeAndLoad(arrayBuffer) {
+    this.log("DEBUG", "Decoding Audio ArrayBuffer...");
+    try {
+      this._stopPlayback();
+      this.buffer = await this.ctx.decodeAudioData(arrayBuffer);
+      this.audioDuration = this.buffer.duration;
+      this.peaks = this.getPeaks(1000);
+      this.startOffset = 0;
+      this.audioCurrentTime = 0;
+      this.audioLoaded = true;
+      this.audioPaused = true;
+      this.log("INFO", `Decoded audio successfully. Duration: ${this.buffer.duration}s`);
+    } catch (err) {
+      this.log("ERROR", `Failed to decode audio: ${err.message || err}`);
+    }
+  }
+
+  async loadAudioFromUrl(url) {
     this.audioLoaded = false;
     this.log("INFO", `loadAudioFromUrl called with: ${url}`);
-    this.audio.src = url;
-    this.audio.load();
+    try {
+      this.log("DEBUG", `Fetching audio data from: ${url}`);
+      const res = await fetch(url);
+      const arrayBuffer = await res.arrayBuffer();
+      await this._decodeAndLoad(arrayBuffer);
+    } catch (err) {
+      this.log("ERROR", `Failed to fetch audio from URL: ${err.message || err}`);
+    }
   }
 
   async loadAudioFromPath(path) {
-    if (!this.audio) return;
     this.audioLoaded = false;
     this.log("INFO", `loadAudioFromPath called with native path: ${path}`);
     try {
       const { StorageAdapter } = await import("../core/storageAdapter.js");
-      const audioUrl = await StorageAdapter.convertFileSrc(path);
-      this.log("INFO", `Converted native path to Asset URL: ${audioUrl}`);
-      this.audio.src = audioUrl;
-      this.audio.load();
+      this.log("DEBUG", "Reading binary file via StorageAdapter...");
+      const bytes = await StorageAdapter.readBinaryFile(path);
+      this.log("DEBUG", `Read ${bytes.length} bytes. Transferring to ArrayBuffer...`);
+      const arrayBuffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+      await this._decodeAndLoad(arrayBuffer);
     } catch (err) {
-      this.log("ERROR", `Failed to load audio from native path: ${err.message || err}`);
+      this.log("ERROR", `Failed to read/decode audio from native path: ${err.message || err}`);
     }
   }
 
-  handleAudioUpload(file) {
-    if (!file || !this.audio) return;
+  async handleAudioUpload(file) {
+    if (!file) return;
     this.audioLoaded = false;
-    const url = URL.createObjectURL(file);
-    this.log("INFO", `handleAudioUpload called. File: ${file.name}, size: ${file.size} bytes. Created ObjectURL: ${url}`);
-    this.audio.src = url;
-    this.audio.load();
+    this.log("INFO", `handleAudioUpload called. File: ${file.name}`);
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      await this._decodeAndLoad(arrayBuffer);
+    } catch (err) {
+      this.log("ERROR", `Failed to upload/decode file: ${err.message || err}`);
+    }
+  }
+
+  _startPlayback() {
+    if (!this.buffer) return;
+    
+    if (this.ctx.state === "suspended") {
+      this.ctx.resume();
+    }
+
+    this.source = this.ctx.createBufferSource();
+    this.source.buffer = this.buffer;
+    this.source.playbackRate.value = this.playbackRate;
+    
+    this.source.connect(this.gainNode);
+
+    this.startTime = this.ctx.currentTime;
+    
+    this.source.start(0, this.startOffset);
+    this.audioPaused = false;
+    this.log("DEBUG", `Playback started from offset: ${this.startOffset}s`);
+
+    this.source.onended = () => {
+      const elapsed = (this.ctx.currentTime - this.startTime) * this.playbackRate;
+      const totalElapsed = this.startOffset + elapsed;
+      if (!this.audioPaused && totalElapsed >= this.audioDuration - 0.2) {
+        this.log("DEBUG", "Audio playback completed naturally");
+        this.audioPaused = true;
+        this.startOffset = 0;
+        this.audioCurrentTime = 0;
+        this._stopTimeSync();
+      }
+    };
+
+    this._startTimeSync();
+  }
+
+  _stopPlayback() {
+    if (this.source) {
+      try {
+        this.source.stop();
+      } catch (e) {}
+      this.source.disconnect();
+      this.source = null;
+    }
+    this.audioPaused = true;
+    this._stopTimeSync();
   }
 
   _startTimeSync() {
-    if (typeof window === "undefined") return;
     const sync = () => {
       if (!this.audioPaused) {
-        this.audioCurrentTime = this.audio.currentTime;
+        const elapsed = (this.ctx.currentTime - this.startTime) * this.playbackRate;
+        this.audioCurrentTime = Math.min(this.audioDuration, this.startOffset + elapsed);
         this._animFrameId = requestAnimationFrame(sync);
       }
     };
@@ -119,62 +176,78 @@ export class AudioStore {
   }
 
   _stopTimeSync() {
-    if (typeof window === "undefined") return;
     if (this._animFrameId) {
       cancelAnimationFrame(this._animFrameId);
       this._animFrameId = null;
     }
   }
 
-  _updateTime() {
-    if (this.audio) {
-      this.audioCurrentTime = this.audio.currentTime;
-    }
-  }
-
   togglePlay() {
-    if (!this.audioLoaded || !this.audio) {
+    if (!this.audioLoaded) {
       this.log("WARN", "togglePlay ignored: audio not loaded");
       return;
     }
-    this.log("DEBUG", `togglePlay. Current state paused: ${this.audio.paused}`);
-    if (this.audio.paused) {
-      this.audio.play().catch((err) => this.log("ERROR", `audio.play() rejected: ${err.message || err}`));
+    this.log("DEBUG", `togglePlay. Current state paused: ${this.audioPaused}`);
+    if (this.audioPaused) {
+      this._startPlayback();
     } else {
-      this.audio.pause();
+      const elapsed = (this.ctx.currentTime - this.startTime) * this.playbackRate;
+      this.startOffset = Math.min(this.audioDuration, this.startOffset + elapsed);
+      this._stopPlayback();
     }
   }
 
   stopAudio() {
-    if (!this.audioLoaded || !this.audio) return;
+    if (!this.audioLoaded) return;
     this.log("DEBUG", "stopAudio called");
-    this.audio.pause();
-    this.audio.currentTime = 0;
+    this._stopPlayback();
+    this.startOffset = 0;
     this.audioCurrentTime = 0;
-    this._stopTimeSync();
   }
 
   seekAudioTo(time) {
-    if (!this.audioLoaded || !this.audio) return;
+    if (!this.audioLoaded) return;
     this.log("DEBUG", `seekAudioTo: ${time}s`);
-    this.audio.currentTime = Math.max(0, Math.min(time, this.audioDuration));
-    this.audioCurrentTime = this.audio.currentTime;
+    const wasPlaying = !this.audioPaused;
+    
+    if (wasPlaying) {
+      this._stopPlayback();
+    }
+    
+    this.startOffset = Math.max(0, Math.min(time, this.audioDuration));
+    this.audioCurrentTime = this.startOffset;
+
+    if (wasPlaying) {
+      this._startPlayback();
+    }
   }
 
   setPlaybackRate(rate) {
     this.log("DEBUG", `setPlaybackRate: ${rate}x`);
+    const oldRate = this.playbackRate;
     this.playbackRate = rate;
-    if (this.audio) {
-      this.audio.playbackRate = rate;
+    
+    if (!this.audioPaused && this.source) {
+      const elapsed = (this.ctx.currentTime - this.startTime) * oldRate;
+      this.startOffset = Math.min(this.audioDuration, this.startOffset + elapsed);
+      this.startTime = this.ctx.currentTime;
+      this.source.playbackRate.value = rate;
+    }
+  }
+
+  setVolume(vol) {
+    this.log("DEBUG", `setVolume: ${vol}`);
+    if (this.gainNode) {
+      this.gainNode.gain.value = vol;
     }
   }
 
   destroy() {
     this.log("DEBUG", "destroying AudioStore");
-    if (this.audio) {
-      this.audio.pause();
-      this.audio.src = "";
-    }
-    this._stopTimeSync();
+    this._stopPlayback();
+    this.audioLoaded = false;
+    this.startOffset = 0;
+    this.audioCurrentTime = 0;
+    this.buffer = null;
   }
 }

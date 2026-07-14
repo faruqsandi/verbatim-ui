@@ -20,16 +20,24 @@
   let volume = $state(1);
   let isMuted = $derived(volume === 0);
 
-  // Sync volume to audio element
+  // Sync volume to audio context gain node
   $effect(() => {
-    if (audioStore.audio) {
-      audioStore.audio.volume = volume;
+    audioStore.setVolume(volume);
+  });
+
+  // Sync audioCurrentTime to wavesurfer cursor
+  $effect(() => {
+    if (wavesurfer && typeof audioStore.audioCurrentTime === "number") {
+      const wsTime = wavesurfer.getCurrentTime();
+      if (Math.abs(wsTime - audioStore.audioCurrentTime) > 0.15) {
+        wavesurfer.setTime(audioStore.audioCurrentTime);
+      }
     }
   });
 
-  // Reactively initialize and bind wavesurfer to the HTML5 Audio element
+  // Reactively initialize and load wavesurfer via pre-computed peaks
   $effect(() => {
-    if (waveformEl && audioStore.audio && audioStore.audioLoaded) {
+    if (waveformEl && audioStore.audioLoaded && audioStore.peaks.length > 0) {
       if (wavesurfer) {
         wavesurfer.destroy();
         waveformEl.innerHTML = "";
@@ -41,7 +49,6 @@
           container: waveformEl,
           waveColor: "#cbd5e1",
           progressColor: "#3b82f6",
-          media: audioStore.audio,
           height: 48,
           cursorColor: "#2563eb",
           cursorWidth: 2,
@@ -71,9 +78,12 @@
           ].filter(Boolean)
         });
 
-        // Make interactive
-        wavesurfer.on('click', () => {
-          audioStore.audioCurrentTime = wavesurfer.getCurrentTime();
+        // Load pre-computed peaks to render the waveform without HTML5 media
+        wavesurfer.load("", [audioStore.peaks], audioStore.audioDuration);
+
+        // Handle seeks from user interaction
+        wavesurfer.on('interaction', (newTime) => {
+          audioStore.seekAudioTo(newTime);
         });
 
       } catch (err) {
