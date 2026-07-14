@@ -46,8 +46,7 @@
         // On Web, audio relinking will still need to happen manually.
         // On Desktop, we can try to re-link immediately.
         if (autosaveData.audioPath && typeof window !== "undefined" && window.__TAURI_INTERNALS__) {
-          const audioUrl = await StorageAdapter.convertFileSrc(autosaveData.audioPath);
-          audioStore.loadAudioFromUrl(audioUrl);
+          audioStore.loadAudioFromPath(autosaveData.audioPath);
         }
       } else {
         await StorageAdapter.clearAutosave();

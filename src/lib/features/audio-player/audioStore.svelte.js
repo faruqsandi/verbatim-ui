@@ -82,6 +82,25 @@ export class AudioStore {
     this.audio.load();
   }
 
+  async loadAudioFromPath(path) {
+    if (!this.audio) return;
+    this.audioLoaded = false;
+    this.log("INFO", `loadAudioFromPath called with native path: ${path}`);
+    try {
+      const { StorageAdapter } = await import("../core/storageAdapter.js");
+      this.log("DEBUG", "Reading binary file via StorageAdapter...");
+      const bytes = await StorageAdapter.readBinaryFile(path);
+      this.log("DEBUG", `Read ${bytes.length} bytes. Creating ObjectURL...`);
+      const blob = new Blob([bytes], { type: "audio/mpeg" });
+      const url = URL.createObjectURL(blob);
+      this.log("INFO", `Created ObjectURL: ${url}`);
+      this.audio.src = url;
+      this.audio.load();
+    } catch (err) {
+      this.log("ERROR", `Failed to load audio from native path: ${err.message || err}`);
+    }
+  }
+
   handleAudioUpload(file) {
     if (!file || !this.audio) return;
     this.audioLoaded = false;

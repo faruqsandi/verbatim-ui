@@ -37,7 +37,9 @@
 
       // On Web, audio linking requires manual input if it exists
       if (result.data.audioPath) {
-        if (typeof window !== "undefined" && !window.__TAURI_INTERNALS__) {
+        if (typeof window !== "undefined" && window.__TAURI_INTERNALS__) {
+          audioStore.loadAudioFromPath(result.data.audioPath);
+        } else {
           alert("Please select the audio file for this project: " + result.data.audioPath.split(/[/\\]/).pop());
           const audioInput = document.createElement("input");
           audioInput.type = "file";
@@ -50,10 +52,6 @@
             }
           };
           audioInput.click();
-        } else {
-          // Tauri: direct load
-          const audioUrl = await StorageAdapter.convertFileSrc(result.data.audioPath);
-          audioStore.loadAudioFromUrl(audioUrl);
         }
       }
     }

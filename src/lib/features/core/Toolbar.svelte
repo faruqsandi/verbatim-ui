@@ -79,8 +79,12 @@
     const path = await StorageAdapter.openAudio();
     if (path) {
       transcriptStore.audioPath = path;
-      const audioUrl = await StorageAdapter.convertFileSrc(path);
-      audioStore.loadAudioFromUrl(audioUrl);
+      if (typeof window !== "undefined" && window.__TAURI_INTERNALS__) {
+        audioStore.loadAudioFromPath(path);
+      } else {
+        const audioUrl = await StorageAdapter.convertFileSrc(path);
+        audioStore.loadAudioFromUrl(audioUrl);
+      }
       transcriptStore.pushState(); // trigger autosave
     } else if (typeof window !== "undefined" && !window.__TAURI_INTERNALS__) {
       triggerAudioInput();
@@ -133,12 +137,11 @@
       await transcriptStore.loadProject(result.data, audioStore);
 
       if (result.data.audioPath) {
-        if (typeof window !== "undefined" && !window.__TAURI_INTERNALS__) {
+        if (typeof window !== "undefined" && window.__TAURI_INTERNALS__) {
+          audioStore.loadAudioFromPath(result.data.audioPath);
+        } else {
           alert("Please select the audio file for this project: " + result.data.audioPath.split(/[/\\]/).pop());
           triggerAudioInput();
-        } else {
-          const audioUrl = await StorageAdapter.convertFileSrc(result.data.audioPath);
-          audioStore.loadAudioFromUrl(audioUrl);
         }
       }
     }

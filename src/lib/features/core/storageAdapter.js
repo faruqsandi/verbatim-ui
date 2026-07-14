@@ -306,6 +306,15 @@ export class StorageAdapter {
     throw new Error("readTextFile is only available in Tauri");
   }
 
+  static async readBinaryFile(path) {
+    this.log("DEBUG", "readBinaryFile", `Reading binary file: ${path}`);
+    if (isTauri()) {
+      const { readFile } = await import("@tauri-apps/plugin-fs");
+      return await readFile(path);
+    }
+    throw new Error("readBinaryFile is only available in Tauri");
+  }
+
   static async exportTextFile(content, filename, mimeType = "text/plain") {
     this.log("DEBUG", "exportTextFile", `Exporting file ${filename} with mime ${mimeType}`);
     if (isTauri()) {
