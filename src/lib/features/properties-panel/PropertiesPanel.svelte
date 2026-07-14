@@ -59,18 +59,18 @@
     width: 280px;
     display: flex;
     flex-direction: column;
-    padding: 2rem 0;
+    padding: 1.5rem 0;
     align-self: flex-start;
     flex-shrink: 0;
-    border-left: 1px solid rgba(0, 0, 0, 0.05);
-    margin-left: 1rem;
+    border-left: 1px solid rgba(0, 0, 0, 0.08);
+    background: rgba(248, 250, 252, 0.6);
     height: calc(100vh - 130px);
     position: sticky;
     top: 130px;
   }
 
   .panel-header {
-    padding: 0 1rem 1rem 1rem;
+    padding: 0 1.5rem 1rem 1.5rem;
   }
 
   .panel-header h3 {

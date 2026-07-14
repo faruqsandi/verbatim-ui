@@ -137,14 +137,14 @@
     
     <div class="audio-controls">
       <button
-        class="audio-btn"
+        class="play-btn"
         onclick={() => audioStore.togglePlay()}
         title="Play/Pause (Space)"
       >
         {#if audioStore.audioPaused}
-          <Play size={18} />
+          <Play fill="currentColor" size={20} />
         {:else}
-          <Pause size={18} />
+          <Pause fill="currentColor" size={20} />
         {/if}
       </button>
       <button class="audio-btn" onclick={() => audioStore.stopAudio()} title="Stop">
@@ -167,20 +167,20 @@
         <option value={2.0}>2.0x</option>
       </select>
 
-      <div class="divider"></div>
+      <div class="divider-subtle"></div>
 
-      <div class="volume-control">
+      <div class="control-group">
         <button class="audio-btn" onclick={() => volume = isMuted ? 1 : 0} title="Mute/Unmute">
           {#if isMuted}
-            <VolumeX size={18} />
+            <VolumeX size={16} />
           {:else}
-            <Volume2 size={18} />
+            <Volume2 size={16} />
           {/if}
         </button>
         <input type="range" min="0" max="1" step="0.05" bind:value={volume} class="volume-slider" title="Volume" />
       </div>
 
-      <div class="divider"></div>
+      <div class="divider-subtle"></div>
 
       <div class="zoom-control">
         <span style="font-size: 12px; color: #64748b;">Zoom</span>
@@ -209,57 +209,91 @@
     align-items: center;
     gap: 1.5rem;
     padding: 0.75rem 2rem;
-    background: rgba(248, 250, 252, 0.95);
-    backdrop-filter: blur(8px);
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(16px);
     border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02), 0 2px 4px -1px rgba(0, 0, 0, 0.01);
     z-index: 15;
   }
 
   .audio-controls {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.6rem;
+    background: white;
+    padding: 0.35rem 0.5rem;
+    border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    border: 1px solid rgba(0, 0, 0, 0.04);
+  }
+
+  .play-btn {
+    background: var(--accent-color, #3b82f6);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.4);
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .play-btn:hover {
+    transform: scale(1.05);
+    background: #2563eb;
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.5);
+  }
+
+  .play-btn:active {
+    transform: scale(0.95);
   }
 
   .audio-btn {
-    background: none;
+    background: transparent;
     border: none;
-    color: var(--text-color, #334155);
+    color: var(--ui-color);
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
     padding: 0.4rem;
-    border-radius: 6px;
-    transition: background-color 0.2s;
+    border-radius: 8px;
+    transition: all 0.2s ease;
   }
 
   .audio-btn:hover {
-    background-color: rgba(0, 0, 0, 0.05);
+    background-color: rgba(0, 0, 0, 0.06);
+    color: var(--text-color);
   }
 
-  .divider {
+  .divider-subtle {
     width: 1px;
     height: 1.25rem;
-    background-color: rgba(0, 0, 0, 0.1);
-    margin: 0 0.5rem;
+    background-color: rgba(0, 0, 0, 0.08);
+    margin: 0 0.25rem;
   }
 
   .speed-select {
-    padding: 0.25rem 0.5rem;
+    padding: 0.25rem 0.4rem;
     border-radius: 6px;
-    border: 1px solid rgba(0, 0, 0, 0.1);
-    background: white;
+    border: none;
+    background: transparent;
     font-family: var(--font-ui);
     font-size: 0.8rem;
+    font-weight: 500;
     color: var(--ui-color);
     cursor: pointer;
     outline: none;
-    transition: border-color 0.2s;
+    transition: color 0.2s;
   }
 
   .speed-select:hover {
-    border-color: rgba(0, 0, 0, 0.2);
+    color: var(--text-color);
+    background: rgba(0, 0, 0, 0.04);
   }
 
   .speed-select:focus {
@@ -285,9 +319,10 @@
 
   .waveform-container {
     flex: 1;
-    background: rgba(255, 255, 255, 0.6);
-    border-radius: 6px;
-    padding: 4px 8px;
+    background: white;
+    border-radius: 12px;
+    padding: 4px 12px;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.02);
     border: 1px solid rgba(0, 0, 0, 0.05);
     overflow: hidden;
     min-width: 0;
@@ -298,7 +333,7 @@
     opacity: 0.8;
   }
 
-  .volume-control, .zoom-control {
+  .control-group, .zoom-control {
     display: flex;
     align-items: center;
     gap: 0.25rem;

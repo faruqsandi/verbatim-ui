@@ -15,7 +15,10 @@
     FilePlus,
     FolderOpen,
     Download,
-    Terminal
+    Terminal,
+    Underline,
+    Table,
+    Sidebar
   } from "@lucide/svelte";
   import { StorageAdapter } from "./storageAdapter.js";
 
@@ -256,37 +259,26 @@
     <div class="panel-label">Toolbar</div>
   {/if}
   <header class="toolbar">
-    <div class="toolbar-title">Reader</div>
-    <div class="font-controls">
-      <label class="toggle-label">
-        <input type="checkbox" bind:checked={transcriptStore.showUnderlines} />
-        Underlines
-      </label>
+    <div class="toolbar-group">
+      <div class="toolbar-title">Reader</div>
       <div class="divider"></div>
-      <label class="toggle-label">
-        <input type="checkbox" bind:checked={uiStore.showTablePanel} />
-        Data Table
-      </label>
-      <div class="divider"></div>
-      <label class="toggle-label">
-        <input type="checkbox" bind:checked={uiStore.showPropertiesPanel} />
-        Properties
-      </label>
+      
+      <!-- Group 1: File Operations -->
       <button onclick={handleNewProject} title="New Project" class="icon-btn">
-        <FilePlus size={20} />
+        <FilePlus size={18} />
       </button>
       <button onclick={handleOpenProject} title="Open Project" class="icon-btn">
-        <FolderOpen size={20} />
+        <FolderOpen size={18} />
       </button>
       <button onclick={handleSaveProjectClick} title="Save Project (Ctrl+S)" class="icon-btn">
-        <Save size={20} />
+        <Save size={18} />
       </button>
-      <div class="divider"></div>
+      <div class="divider-subtle"></div>
       <button onclick={handleLoadCsvClick} title="Import CSV Data" class="icon-btn">
-        <Upload size={20} />
+        <Upload size={18} />
       </button>
       <button onclick={handleLoadAudioClick} title="Import Audio" class="icon-btn">
-        <Music size={20} />
+        <Music size={18} />
       </button>
       <select onchange={handleExportChange} class="export-select" value="">
         <option value="" disabled>Export As...</option>
@@ -295,10 +287,38 @@
         <option value="vtt">WebVTT Subtitles</option>
         <option value="txt">TXT Transcript</option>
       </select>
-      <div class="divider"></div>
-      <button onclick={toggleSearchPanel} title="Find & Replace" class="icon-btn" class:active-panel={showSearchPanel}>
-        <Search size={20} />
+    </div>
+
+    <!-- Group 2: View Toggles -->
+    <div class="toolbar-group view-toggles">
+      <button 
+        onclick={() => transcriptStore.showUnderlines = !transcriptStore.showUnderlines} 
+        title="Toggle Underlines" 
+        class="icon-btn toggle-btn" 
+        class:active-panel={transcriptStore.showUnderlines}
+      >
+        <Underline size={18} />
       </button>
+      <button 
+        onclick={() => uiStore.showTablePanel = !uiStore.showTablePanel} 
+        title="Toggle Data Table" 
+        class="icon-btn toggle-btn" 
+        class:active-panel={uiStore.showTablePanel}
+      >
+        <Table size={18} />
+      </button>
+      <button 
+        onclick={() => uiStore.showPropertiesPanel = !uiStore.showPropertiesPanel} 
+        title="Toggle Properties Panel" 
+        class="icon-btn toggle-btn" 
+        class:active-panel={uiStore.showPropertiesPanel}
+      >
+        <Sidebar size={18} />
+      </button>
+    </div>
+
+    <!-- Group 3: App Controls -->
+    <div class="toolbar-group">
       <button
         onclick={() => transcriptStore.undo()}
         disabled={transcriptStore.currentHistoryIndex <= 0}
@@ -306,7 +326,7 @@
         class="icon-btn"
         class:disabled={transcriptStore.currentHistoryIndex <= 0}
       >
-        <Undo size={20} />
+        <Undo size={18} />
       </button>
       <button
         onclick={() => transcriptStore.redo()}
@@ -315,15 +335,19 @@
         class="icon-btn"
         class:disabled={transcriptStore.currentHistoryIndex >= transcriptStore.history.length - 1}
       >
-        <Redo size={20} />
+        <Redo size={18} />
       </button>
-      <div class="divider"></div>
+      <div class="divider-subtle"></div>
+      <button onclick={toggleSearchPanel} title="Find & Replace" class="icon-btn" class:active-panel={showSearchPanel}>
+        <Search size={18} />
+      </button>
+      <div class="divider-subtle"></div>
       <button
         onclick={decreaseFontSize}
         title="Decrease Font Size"
         class="icon-btn"
       >
-        <ZoomOut size={20} />
+        <ZoomOut size={18} />
       </button>
       <div class="scale-indicator">{Math.round(uiStore.fontScale * 100)}%</div>
       <button
@@ -331,18 +355,18 @@
         title="Increase Font Size"
         class="icon-btn"
       >
-        <ZoomIn size={20} />
+        <ZoomIn size={18} />
       </button>
-      <div class="divider"></div>
+      <div class="divider-subtle"></div>
       <button
         onclick={() => uiStore.toggleDarkMode()}
         title="Toggle Theme"
         class="icon-btn"
       >
         {#if uiStore.isDarkMode}
-          <Sun size={20} />
+          <Sun size={18} />
         {:else}
-          <Moon size={20} />
+          <Moon size={18} />
         {/if}
       </button>
       <button
@@ -351,7 +375,7 @@
         class="icon-btn"
         class:active-panel={uiStore.showPanelLabels}
       >
-        <Tags size={20} />
+        <Tags size={18} />
       </button>
       <button
         onclick={() => uiStore.showLogPanel = !uiStore.showLogPanel}
@@ -359,10 +383,11 @@
         class="icon-btn"
         class:active-panel={uiStore.showLogPanel}
       >
-        <Terminal size={20} />
+        <Terminal size={18} />
       </button>
     </div>
   </header>
+
 
   {#if showSearchPanel}
     <div class="search-panel">
@@ -408,46 +433,46 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 1rem 2rem;
-    background: rgba(255, 255, 255, 0.95);
-    backdrop-filter: blur(8px);
-    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+    padding: 0.75rem 2rem;
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  }
+
+  .toolbar-group {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  
+  .view-toggles {
+    background: rgba(0, 0, 0, 0.03);
+    padding: 0.2rem;
+    border-radius: 8px;
+    border: 1px solid rgba(0, 0, 0, 0.05);
   }
 
   .toolbar-title {
     font-family: var(--font-ui);
-    font-weight: 500;
-    color: var(--ui-color);
+    font-weight: 600;
+    color: var(--text-color);
     letter-spacing: 0.5px;
-    font-size: 0.9rem;
-  }
-
-  .font-controls {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-  }
-
-  .toggle-label {
-    display: flex;
-    align-items: center;
-    gap: 0.35rem;
-    font-family: var(--font-ui);
-    font-size: 0.85rem;
-    color: var(--ui-color);
-    cursor: pointer;
-    user-select: none;
-  }
-
-  .toggle-label input[type="checkbox"] {
-    cursor: pointer;
+    font-size: 1rem;
+    margin-right: 0.5rem;
   }
 
   .divider {
     width: 1px;
-    height: 1.25rem;
-    background-color: rgba(0, 0, 0, 0.1);
+    height: 1.5rem;
+    background-color: rgba(0, 0, 0, 0.15);
     margin: 0 0.5rem;
+  }
+  
+  .divider-subtle {
+    width: 1px;
+    height: 1.25rem;
+    background-color: rgba(0, 0, 0, 0.08);
+    margin: 0 0.25rem;
   }
 
   .scale-indicator {
@@ -459,26 +484,25 @@
   }
 
   .icon-btn {
-    background: none;
+    background: transparent;
     border: none;
-    color: var(--text-color);
+    color: var(--ui-color);
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
     padding: 0.5rem;
     border-radius: 6px;
-    transition:
-      background-color 0.2s,
-      transform 0.1s;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   .icon-btn:hover {
-    background-color: rgba(0, 0, 0, 0.04);
+    background-color: rgba(0, 0, 0, 0.06);
+    color: var(--text-color);
   }
 
   .icon-btn:active {
-    transform: scale(0.95);
+    transform: scale(0.92);
   }
 
   .icon-btn.disabled {
