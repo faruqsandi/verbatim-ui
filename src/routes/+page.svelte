@@ -115,10 +115,10 @@
       }
     }
     
-    if (e.key === "F12") {
+    if (e.key === "F12" || (e.ctrlKey && e.key === "`") || (e.ctrlKey && e.shiftKey && (e.key === "l" || e.key === "L"))) {
       e.preventDefault();
       uiStore.showLogPanel = !uiStore.showLogPanel;
-      logger.info("Keyboard", `Toggled log panel via F12: ${uiStore.showLogPanel}`);
+      logger.info("Keyboard", `Toggled log panel: ${uiStore.showLogPanel}`);
     }
 
     if (e.ctrlKey && (e.key === "s" || e.key === "S")) {

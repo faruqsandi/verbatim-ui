@@ -32,11 +32,18 @@ export class AudioStore {
 
   constructor() {
     if (typeof window !== "undefined") {
-      const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      if (AudioCtx) {
-        this.ctx = new AudioCtx();
-        this.gainNode = this.ctx.createGain();
-        this.gainNode.connect(this.ctx.destination);
+      try {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (AudioCtx) {
+          this.ctx = new AudioCtx();
+          this.gainNode = this.ctx.createGain();
+          this.gainNode.connect(this.ctx.destination);
+          this.log("INFO", "Web Audio API Context initialized successfully");
+        } else {
+          this.log("WARN", "Web Audio API is not supported in this environment");
+        }
+      } catch (err) {
+        console.error("AudioStore AudioContext initialization error:", err);
       }
     }
   }
@@ -61,6 +68,10 @@ export class AudioStore {
   }
 
   async _decodeAndLoad(arrayBuffer) {
+    if (!this.ctx) {
+      this.log("ERROR", "Cannot decode audio: AudioContext is not initialized");
+      return;
+    }
     this.log("DEBUG", "Decoding Audio ArrayBuffer...");
     try {
       this._stopPlayback();
@@ -118,7 +129,7 @@ export class AudioStore {
   }
 
   _startPlayback() {
-    if (!this.buffer) return;
+    if (!this.buffer || !this.ctx) return;
     
     if (this.ctx.state === "suspended") {
       this.ctx.resume();
@@ -165,7 +176,7 @@ export class AudioStore {
 
   _startTimeSync() {
     const sync = () => {
-      if (!this.audioPaused) {
+      if (!this.audioPaused && this.ctx) {
         const elapsed = (this.ctx.currentTime - this.startTime) * this.playbackRate;
         this.audioCurrentTime = Math.min(this.audioDuration, this.startOffset + elapsed);
         this._animFrameId = requestAnimationFrame(sync);
@@ -183,8 +194,8 @@ export class AudioStore {
   }
 
   togglePlay() {
-    if (!this.audioLoaded) {
-      this.log("WARN", "togglePlay ignored: audio not loaded");
+    if (!this.audioLoaded || !this.ctx) {
+      this.log("WARN", "togglePlay ignored: audio not loaded or AudioContext not initialized");
       return;
     }
     this.log("DEBUG", `togglePlay. Current state paused: ${this.audioPaused}`);
@@ -227,7 +238,7 @@ export class AudioStore {
     const oldRate = this.playbackRate;
     this.playbackRate = rate;
     
-    if (!this.audioPaused && this.source) {
+    if (!this.audioPaused && this.source && this.ctx) {
       const elapsed = (this.ctx.currentTime - this.startTime) * oldRate;
       this.startOffset = Math.min(this.audioDuration, this.startOffset + elapsed);
       this.startTime = this.ctx.currentTime;
