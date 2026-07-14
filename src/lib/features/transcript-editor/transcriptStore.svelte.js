@@ -14,6 +14,17 @@ export class TranscriptStore {
 
   showUnderlines = $state(true);
 
+  /** @type {any} */
+  logger = null;
+
+  log(level, msg) {
+    if (this.logger) {
+      this.logger.log(level, "TranscriptStore", msg);
+    } else {
+      console.log(`[TranscriptStore] ${msg}`);
+    }
+  }
+
   // Speaker color map
   /** @type {Record<string, string>} */
   speakerColors = $state({});
@@ -70,6 +81,7 @@ export class TranscriptStore {
   }
 
   async initDemo() {
+    this.log("INFO", "initDemo called");
     this.isLoading = false;
     this.errorMsg = "";
     this.currentFilePath = null;
@@ -85,6 +97,7 @@ export class TranscriptStore {
   // -----------------------
   
   serializeProject() {
+    this.log("DEBUG", `serializeProject called. Words: ${this.words.length}, AudioPath: ${this.audioPath}`);
     return {
       version: 1,
       audioPath: this.audioPath,
@@ -95,6 +108,7 @@ export class TranscriptStore {
   }
 
   async loadProject(projectData, audioStore) {
+    this.log("INFO", `loadProject called. Words count: ${projectData?.words?.length}, audioPath: ${projectData?.audioPath}`);
     this.isLoading = true;
     this.errorMsg = "";
     
@@ -114,7 +128,9 @@ export class TranscriptStore {
       
       this.isProjectOpen = true;
       this.isLoading = false;
+      this.log("INFO", "Project loaded successfully into TranscriptStore");
     } catch (e) {
+      this.log("ERROR", `loadProject failed: ${e.message || e}`);
       this.errorMsg = "Failed to load project data";
       this.isLoading = false;
     }
@@ -208,6 +224,7 @@ export class TranscriptStore {
   }
 
   async loadCsvFromString(csvStr, path = null) {
+    this.log("INFO", `loadCsvFromString called. Path: ${path}, String length: ${csvStr?.length}`);
     this.isLoading = true;
     this.errorMsg = "";
     if (path) this.currentFilePath = path;
@@ -296,6 +313,7 @@ export class TranscriptStore {
   _triggerAutosave() {
     if (this._autosaveTimeout) clearTimeout(this._autosaveTimeout);
     this._autosaveTimeout = setTimeout(() => {
+      this.log("DEBUG", "Debounced autosave trigger running");
       import("../core/storageAdapter.js").then(({ StorageAdapter }) => {
         StorageAdapter.saveAutosave(this.serializeProject());
       });

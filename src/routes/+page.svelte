@@ -14,16 +14,25 @@
   import PropertiesPanel from "$lib/features/properties-panel/PropertiesPanel.svelte";
   import TablePanel from "$lib/features/data-view/TablePanel.svelte";
   import WelcomeScreen from "$lib/features/core/WelcomeScreen.svelte";
+  import { Logger } from "$lib/features/core/logger.svelte.js";
+  import LogPanel from "$lib/features/core/LogPanel.svelte";
 
   // Instantiate the feature stores
   const uiStore = new UiStore();
   const audioStore = new AudioStore();
   const transcriptStore = new TranscriptStore();
+  const logger = new Logger();
+
+  // Inject logger into static adapter and reactive stores
+  StorageAdapter.logger = logger;
+  audioStore.logger = logger;
+  transcriptStore.logger = logger;
 
   // Provide to children
   setContext("UI_STORE", uiStore);
   setContext("AUDIO_STORE", audioStore);
   setContext("TRANSCRIPT_STORE", transcriptStore);
+  setContext("LOGGER", logger);
 
   /** @type {any} */
   let unlistenFileDrop;
@@ -107,6 +116,12 @@
       }
     }
     
+    if (e.key === "F12") {
+      e.preventDefault();
+      uiStore.showLogPanel = !uiStore.showLogPanel;
+      logger.info("Keyboard", `Toggled log panel via F12: ${uiStore.showLogPanel}`);
+    }
+
     if (e.ctrlKey && (e.key === "s" || e.key === "S")) {
       e.preventDefault();
       
@@ -191,6 +206,8 @@
   <ContextMenu />
   </div>
 {/if}
+
+<LogPanel />
 
 <style>
   .app-container {

@@ -14,7 +14,8 @@
     Tags,
     FilePlus,
     FolderOpen,
-    Download
+    Download,
+    Terminal
   } from "@lucide/svelte";
   import { StorageAdapter } from "./storageAdapter.js";
 
@@ -348,6 +349,14 @@
         class:active-panel={uiStore.showPanelLabels}
       >
         <Tags size={20} />
+      </button>
+      <button
+        onclick={() => uiStore.showLogPanel = !uiStore.showLogPanel}
+        title="Toggle Debug Console (F12)"
+        class="icon-btn"
+        class:active-panel={uiStore.showLogPanel}
+      >
+        <Terminal size={20} />
       </button>
     </div>
   </header>

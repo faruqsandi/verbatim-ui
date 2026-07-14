@@ -7,6 +7,8 @@ export class UiStore {
 
   /** @type {any} */
   webFileHandle = $state(null);
+
+  showLogPanel = $state(false);
   
   contextMenu = $state({
     show: false,
