@@ -27,7 +27,6 @@
     {
       "identifier": "fs:allow-remove",
       "allow": [{ "path": "**" }]
-    },
-    "core:asset:default"
+    }
   ]
 }
