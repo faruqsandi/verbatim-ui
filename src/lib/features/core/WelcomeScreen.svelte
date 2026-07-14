@@ -72,14 +72,6 @@
       </button>
     </div>
   </div>
-
-  <button 
-    onclick={() => uiStore.showLogPanel = !uiStore.showLogPanel} 
-    class="debug-trigger-btn"
-    title="Toggle Debug Console (Ctrl+`)"
-  >
-    ⚙️ Debug Console
-  </button>
 </div>
 
 <style>
@@ -149,25 +141,6 @@
   }
 
   .secondary-btn:hover {
-    background: rgba(0, 0, 0, 0.1);
-  }
-
-  .debug-trigger-btn {
-    position: absolute;
-    bottom: 1.5rem;
-    right: 1.5rem;
-    background: rgba(0, 0, 0, 0.05);
-    color: var(--text-color);
-    font-size: 0.75rem;
-    padding: 0.4rem 0.8rem;
-    border-radius: 4px;
-    border: 1px solid rgba(0, 0, 0, 0.1);
-    opacity: 0.6;
-    transition: opacity 0.2s, background 0.2s;
-  }
-
-  .debug-trigger-btn:hover {
-    opacity: 1;
     background: rgba(0, 0, 0, 0.1);
   }
 </style>
